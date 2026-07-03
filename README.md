@@ -9,7 +9,8 @@ having to reshape the repository later.
 
 ```text
 crates/
-  toolbox/   busybox-style entrypoint and shared command dispatcher
+  toolbox/       busybox-style entrypoint and shared command dispatcher
+  ops-runbook/   policy-driven restricted executor for homelab operations
 ```
 
 The primary binary is `toolbox`. Commands can be used in three forms:
@@ -86,6 +87,49 @@ Useful options:
 Public release downloads can be tested without authentication. GitHub App auth
 must be tested against a repository where the App is installed, even if the
 repository itself is public.
+
+## ops-runbook
+
+`ops-runbook` is a separate binary for allowing automation agents such as
+Hermes or OpenClaw to perform a narrow set of root operations through sudo:
+
+- [Installation and usage (English)](docs/ops-runbook-install-usage.en.md)
+- [설치 및 사용법 (한국어)](docs/ops-runbook-install-usage.ko.md)
+
+```sh
+sudo /usr/local/sbin/ops-runbook service restart nginx
+sudo /usr/local/sbin/ops-runbook service reload coredns
+sudo /usr/local/sbin/ops-runbook service status cloudflared
+sudo /usr/local/sbin/ops-runbook logs nginx --lines 200
+sudo /usr/local/sbin/ops-runbook policy check
+sudo /usr/local/sbin/ops-runbook policy explain service_restart nginx
+```
+
+It reads `/etc/ops-runbook/policy.toml`, determines the real caller from
+`SUDO_USER`, rejects direct root execution, validates service targets, writes an
+audit log to `/var/log/ops-runbook/audit.log`, and then runs fixed
+`systemctl`/`journalctl` command paths without a shell.
+
+Build it with:
+
+```sh
+cargo build --release --bin ops-runbook
+```
+
+An admin can bootstrap a host directly from a downloaded or locally copied
+binary:
+
+```sh
+sudo ./ops-runbook bootstrap --user hermes --user openclaw
+```
+
+`bootstrap` installs the current binary to `--binary-path`, creates the group,
+updates existing users passed with `--user`, creates config/log directories,
+writes the sample policy, writes the sudoers rule, and writes logrotate config.
+Paths embedded in sudoers can be adjusted with options such as `--binary-path`,
+`--sudoers-path`, `--policy-path`, `--audit-log-path`, `--sudo-log-path`, and
+`--group`. The generated sudoers rule allows only the operational subcommands
+and does not allow `%ops-agent` to run `bootstrap`.
 
 `github app-run` uses the same token minting inputs as `app-auth`, but runs a
 command with the temporary installation token set as both `GH_TOKEN` and

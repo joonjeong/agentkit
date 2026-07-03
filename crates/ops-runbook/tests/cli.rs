@@ -1,0 +1,330 @@
+use assert_cmd::Command;
+use predicates::prelude::*;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+#[test]
+fn policy_check_accepts_sample_policy() {
+    let temp = temp_dir("ops-runbook-policy-check");
+    let policy = write_policy(&temp, SAMPLE_POLICY);
+
+    Command::cargo_bin("ops-runbook")
+        .expect("binary exists")
+        .args(["policy", "check"])
+        .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
+        .env("OPS_RUNBOOK_POLICY_PATH", &policy)
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("policy OK:")
+                .and(predicate::str::contains("callers: hermes, openclaw")),
+        );
+
+    fs::remove_dir_all(temp).expect("temporary directory removed");
+}
+
+#[test]
+fn explain_reports_allow_for_current_sudo_user() {
+    let temp = temp_dir("ops-runbook-explain");
+    let policy = write_policy(&temp, SAMPLE_POLICY);
+
+    Command::cargo_bin("ops-runbook")
+        .expect("binary exists")
+        .args(["policy", "explain", "service_restart", "nginx"])
+        .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
+        .env("OPS_RUNBOOK_POLICY_PATH", &policy)
+        .env("SUDO_USER", "hermes")
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("caller: hermes")
+                .and(predicate::str::contains("decision: allow"))
+                .and(predicate::str::contains(
+                    "source: callers.hermes.service_restart",
+                )),
+        );
+
+    fs::remove_dir_all(temp).expect("temporary directory removed");
+}
+
+#[test]
+fn service_status_runs_fixed_systemctl_without_shell() {
+    let temp = temp_dir("ops-runbook-status");
+    let policy = write_policy(&temp, SAMPLE_POLICY);
+    let audit = temp.join("audit.log");
+    let recorder = write_recorder(&temp, "systemctl-recorder");
+    let record = temp.join("systemctl.args");
+
+    Command::cargo_bin("ops-runbook")
+        .expect("binary exists")
+        .args(["service", "status", "nginx"])
+        .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
+        .env("OPS_RUNBOOK_POLICY_PATH", &policy)
+        .env("OPS_RUNBOOK_AUDIT_LOG", &audit)
+        .env("OPS_RUNBOOK_SYSTEMCTL_PATH", &recorder)
+        .env("OPS_RUNBOOK_RECORD_PATH", &record)
+        .env("SUDO_USER", "hermes")
+        .assert()
+        .success();
+
+    assert_eq!(
+        fs::read_to_string(record).expect("recorded args"),
+        "--no-pager\nstatus\nnginx.service\n"
+    );
+    let audit_log = fs::read_to_string(audit).expect("audit log");
+    assert!(audit_log.contains("caller=hermes action=service_status target=nginx result=allow"));
+    assert!(audit_log.contains(
+        "caller=hermes action=service_status target=nginx result=executed reason=exit_code=0"
+    ));
+
+    fs::remove_dir_all(temp).expect("temporary directory removed");
+}
+
+#[test]
+fn policy_check_rejects_unknown_policy_fields() {
+    let temp = temp_dir("ops-runbook-unknown-policy-field");
+    let policy = write_policy(
+        &temp,
+        r#"
+version = 1
+
+[defaults]
+max_log_lines = 1000
+
+[callers.hermes]
+service_restarts = ["nginx"]
+"#,
+    );
+
+    Command::cargo_bin("ops-runbook")
+        .expect("binary exists")
+        .args(["policy", "check"])
+        .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
+        .env("OPS_RUNBOOK_POLICY_PATH", &policy)
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("unknown field"));
+
+    fs::remove_dir_all(temp).expect("temporary directory removed");
+}
+
+#[test]
+fn denied_target_is_audited_and_not_executed() {
+    let temp = temp_dir("ops-runbook-denied");
+    let policy = write_policy(&temp, SAMPLE_POLICY);
+    let audit = temp.join("audit.log");
+    let recorder = write_recorder(&temp, "systemctl-recorder");
+    let record = temp.join("systemctl.args");
+
+    Command::cargo_bin("ops-runbook")
+        .expect("binary exists")
+        .args(["service", "restart", "nginx"])
+        .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
+        .env("OPS_RUNBOOK_POLICY_PATH", &policy)
+        .env("OPS_RUNBOOK_AUDIT_LOG", &audit)
+        .env("OPS_RUNBOOK_SYSTEMCTL_PATH", &recorder)
+        .env("OPS_RUNBOOK_RECORD_PATH", &record)
+        .env("SUDO_USER", "openclaw")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("target not allowed: nginx"));
+
+    assert!(!record.exists());
+    let audit_log = fs::read_to_string(audit).expect("audit log");
+    assert!(audit_log.contains(
+        "caller=openclaw action=service_restart target=nginx result=deny reason=target_not_allowed"
+    ));
+
+    fs::remove_dir_all(temp).expect("temporary directory removed");
+}
+
+#[test]
+fn logs_rejects_line_count_above_policy_maximum() {
+    let temp = temp_dir("ops-runbook-lines");
+    let policy = write_policy(&temp, SAMPLE_POLICY);
+    let audit = temp.join("audit.log");
+
+    Command::cargo_bin("ops-runbook")
+        .expect("binary exists")
+        .args(["logs", "nginx", "--lines", "999999"])
+        .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
+        .env("OPS_RUNBOOK_POLICY_PATH", &policy)
+        .env("OPS_RUNBOOK_AUDIT_LOG", &audit)
+        .env("SUDO_USER", "hermes")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("invalid log line count: 999999"));
+
+    let audit_log = fs::read_to_string(audit).expect("audit log");
+    assert!(audit_log.contains("result=deny reason=invalid_line_count"));
+
+    fs::remove_dir_all(temp).expect("temporary directory removed");
+}
+
+#[test]
+fn direct_root_execution_is_rejected() {
+    let temp = temp_dir("ops-runbook-root");
+    let policy = write_policy(&temp, SAMPLE_POLICY);
+
+    Command::cargo_bin("ops-runbook")
+        .expect("binary exists")
+        .args(["service", "status", "nginx"])
+        .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
+        .env("OPS_RUNBOOK_POLICY_PATH", &policy)
+        .env("SUDO_USER", "root")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "direct root execution is not allowed",
+        ));
+
+    fs::remove_dir_all(temp).expect("temporary directory removed");
+}
+
+#[test]
+fn bootstrap_installs_binary_and_writes_configurable_files() {
+    let temp = temp_dir("ops-runbook-bootstrap");
+    let source_binary = temp.join("source/ops-runbook");
+    let binary = temp.join("bin/ops-runbook");
+    let sudoers = temp.join("sudoers/custom-ops-agent");
+    let policy = temp.join("etc/policy.toml");
+    let audit_log = temp.join("logs/audit.log");
+    let sudo_log = temp.join("logs/sudo.log");
+    let logrotate = temp.join("logrotate/ops-runbook");
+    fs::create_dir(source_binary.parent().expect("source parent")).expect("source parent created");
+    fs::write(&source_binary, b"fake ops-runbook binary").expect("source binary written");
+
+    Command::cargo_bin("ops-runbook")
+        .expect("binary exists")
+        .args([
+            "bootstrap",
+            "--skip-system-accounts",
+            "--skip-visudo",
+            "--source-binary",
+            source_binary.to_str().expect("utf-8 path"),
+            "--group",
+            "custom-ops",
+            "--binary-path",
+            binary.to_str().expect("utf-8 path"),
+            "--sudoers-path",
+            sudoers.to_str().expect("utf-8 path"),
+            "--policy-path",
+            policy.to_str().expect("utf-8 path"),
+            "--audit-log-path",
+            audit_log.to_str().expect("utf-8 path"),
+            "--sudo-log-path",
+            sudo_log.to_str().expect("utf-8 path"),
+            "--logrotate-path",
+            logrotate.to_str().expect("utf-8 path"),
+        ])
+        .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("sudoers ready:"));
+
+    assert_eq!(
+        fs::read(&binary).expect("installed binary"),
+        b"fake ops-runbook binary"
+    );
+    let sudoers_contents = fs::read_to_string(&sudoers).expect("sudoers written");
+    assert!(sudoers_contents.contains("Defaults:%custom-ops"));
+    assert!(sudoers_contents.contains(&format!("logfile=\"{}\"", sudo_log.display())));
+    assert!(sudoers_contents.contains(&format!("{} service restart *", binary.display())));
+    assert!(sudoers_contents.contains(&format!("{} policy explain *", binary.display())));
+    assert!(!sudoers_contents.contains(" bootstrap"));
+
+    let policy_contents = fs::read_to_string(policy).expect("policy written");
+    assert!(policy_contents.contains("[callers.hermes]"));
+
+    let logrotate_contents = fs::read_to_string(logrotate).expect("logrotate written");
+    assert!(logrotate_contents.contains(&audit_log.display().to_string()));
+    assert!(logrotate_contents.contains(&sudo_log.display().to_string()));
+
+    fs::remove_dir_all(temp).expect("temporary directory removed");
+}
+
+#[test]
+fn bootstrap_rejects_relative_sudoers_paths() {
+    Command::cargo_bin("ops-runbook")
+        .expect("binary exists")
+        .args([
+            "bootstrap",
+            "--skip-system-accounts",
+            "--skip-visudo",
+            "--sudoers-path",
+            "relative/sudoers",
+        ])
+        .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--sudoers-path must be absolute"));
+}
+
+fn temp_dir(prefix: &str) -> PathBuf {
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system time after unix epoch")
+        .as_nanos();
+    let count = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let path = std::env::temp_dir().join(format!("{prefix}-{nonce}-{count}"));
+    fs::create_dir(&path).expect("temporary directory created");
+    path
+}
+
+fn write_policy(dir: &Path, contents: &str) -> PathBuf {
+    let path = dir.join("policy.toml");
+    fs::write(&path, contents).expect("policy written");
+    path
+}
+
+#[cfg(unix)]
+fn write_recorder(dir: &Path, name: &str) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+
+    let path = dir.join(name);
+    fs::write(
+        &path,
+        "#!/bin/sh\n: > \"$OPS_RUNBOOK_RECORD_PATH\"\nfor arg in \"$@\"; do printf '%s\\n' \"$arg\" >> \"$OPS_RUNBOOK_RECORD_PATH\"; done\n",
+    )
+    .expect("recorder written");
+    let mut permissions = fs::metadata(&path)
+        .expect("recorder metadata")
+        .permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&path, permissions).expect("recorder executable");
+    path
+}
+
+#[cfg(not(unix))]
+fn write_recorder(dir: &Path, name: &str) -> PathBuf {
+    let path = dir.join(format!("{name}.bat"));
+    fs::write(
+        &path,
+        "@echo off\r\nbreak > %OPS_RUNBOOK_RECORD_PATH%\r\n:loop\r\nif \"%1\"==\"\" exit /b 0\r\necho %1>> %OPS_RUNBOOK_RECORD_PATH%\r\nshift\r\ngoto loop\r\n",
+    )
+    .expect("recorder written");
+    path
+}
+
+const SAMPLE_POLICY: &str = r#"
+version = 1
+
+[defaults]
+max_log_lines = 1000
+
+[callers.hermes]
+service_restart = ["nginx", "coredns", "cloudflared"]
+service_reload = ["nginx", "coredns"]
+service_status = ["nginx", "coredns", "cloudflared"]
+logs = ["nginx", "coredns", "cloudflared"]
+
+[callers.openclaw]
+service_restart = ["openclaw", "myriad-bot"]
+service_reload = []
+service_status = ["openclaw", "myriad-bot"]
+logs = ["openclaw", "myriad-bot"]
+"#;
