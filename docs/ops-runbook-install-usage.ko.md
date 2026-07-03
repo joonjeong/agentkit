@@ -1,0 +1,132 @@
+# ops-runbook 설치 및 사용법
+
+`ops-runbook`은 홈랩 운영 작업을 위한 policy 기반 제한 실행기입니다.
+자동화 에이전트가 sudo를 통해 제한된 root 작업만 실행하게 하며, raw shell,
+`systemctl`, `apt`, Docker socket, Ansible 접근 권한은 주지 않습니다.
+
+## 보안 모델
+
+신뢰할 수 있는 관리자가 다음 명령을 실행합니다.
+
+```sh
+sudo ./ops-runbook bootstrap --user hermes --user openclaw
+```
+
+`bootstrap`은 대상 호스트를 구성합니다.
+
+- 현재 바이너리를 `/usr/local/sbin/ops-runbook`에 설치
+- `ops-agent` 시스템 그룹이 없으면 생성
+- `--user`로 지정한 기존 계정을 `ops-agent` 그룹에 추가
+- `/etc/ops-runbook/policy.toml`이 없으면 기본 policy 생성
+- `/etc/sudoers.d/ops-agent` 생성
+- `/var/log/ops-runbook` 아래 로그 경로 생성
+- `/etc/logrotate.d/ops-runbook` 생성
+
+생성되는 sudoers 규칙은 `ops-agent` 멤버에게 운영 서브커맨드만 허용합니다.
+에이전트가 `bootstrap`을 실행할 수는 없습니다.
+
+## 빌드
+
+저장소 루트에서 실행합니다.
+
+```sh
+cargo build --release --bin ops-runbook
+```
+
+바이너리는 다음 위치에 생성됩니다.
+
+```text
+target/release/ops-runbook
+```
+
+## Bootstrap
+
+바이너리를 대상 호스트에 복사하거나 다운로드한 뒤 실행합니다.
+
+```sh
+sudo ./ops-runbook bootstrap --user hermes --user openclaw
+```
+
+주요 옵션:
+
+```sh
+sudo ./ops-runbook bootstrap \
+  --source-binary /path/to/ops-runbook \
+  --binary-path /usr/local/sbin/ops-runbook \
+  --group ops-agent \
+  --sudoers-path /etc/sudoers.d/ops-agent \
+  --policy-path /etc/ops-runbook/policy.toml \
+  --audit-log-path /var/log/ops-runbook/audit.log \
+  --sudo-log-path /var/log/ops-runbook/sudo.log \
+  --logrotate-path /etc/logrotate.d/ops-runbook
+```
+
+기존 policy 파일을 샘플 policy로 교체하려면 `--force-policy`를 사용합니다.
+`--force-policy`가 없으면 기존 policy 파일은 보존됩니다.
+
+## Policy
+
+기본 policy 형식은 TOML입니다.
+
+```toml
+version = 1
+
+[defaults]
+max_log_lines = 1000
+
+[callers.hermes]
+service_restart = ["nginx", "coredns", "cloudflared"]
+service_reload = ["nginx", "coredns"]
+service_status = ["nginx", "coredns", "cloudflared"]
+logs = ["nginx", "coredns", "cloudflared"]
+```
+
+호출자는 `SUDO_USER`에서 읽습니다. 예를 들어 `hermes`가 다음을 실행하면:
+
+```sh
+sudo /usr/local/sbin/ops-runbook service restart nginx
+```
+
+`ops-runbook`은 `callers.hermes.service_restart`에 `nginx`가 있는지 확인합니다.
+
+## 사용법
+
+허용되는 운영 명령:
+
+```sh
+sudo /usr/local/sbin/ops-runbook service restart nginx
+sudo /usr/local/sbin/ops-runbook service reload coredns
+sudo /usr/local/sbin/ops-runbook service status cloudflared
+sudo /usr/local/sbin/ops-runbook logs nginx --lines 200
+sudo /usr/local/sbin/ops-runbook policy check
+sudo /usr/local/sbin/ops-runbook policy explain service_restart nginx
+sudo /usr/local/sbin/ops-runbook version
+```
+
+다음 계열의 명령은 의도적으로 제공하지 않습니다.
+
+- `exec`
+- `shell`
+- raw `systemctl`
+- raw `apt`
+- `ansible-playbook`
+
+## 확인
+
+policy를 검증합니다.
+
+```sh
+sudo /usr/local/sbin/ops-runbook policy check
+```
+
+현재 sudo 호출자의 정책 판단을 설명합니다.
+
+```sh
+sudo /usr/local/sbin/ops-runbook policy explain service_restart nginx
+```
+
+감사 로그는 다음 파일에 기록됩니다.
+
+```text
+/var/log/ops-runbook/audit.log
+```

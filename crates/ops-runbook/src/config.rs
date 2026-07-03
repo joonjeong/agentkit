@@ -10,6 +10,7 @@ use crate::policy::{validate_caller, validate_target, Action};
 pub const DEFAULT_POLICY_PATH: &str = "/etc/ops-runbook/policy.toml";
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
     pub version: u32,
     #[serde(default)]
@@ -19,11 +20,13 @@ pub struct Config {
 }
 
 #[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Defaults {
     pub max_log_lines: Option<u32>,
 }
 
 #[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CallerPolicy {
     #[serde(default)]
     pub service_restart: Vec<String>,

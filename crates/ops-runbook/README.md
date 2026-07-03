@@ -4,6 +4,9 @@
 Agents in the `ops-agent` Unix group can run only the operations listed in
 `/etc/ops-runbook/policy.toml` through sudo:
 
+- [Installation and usage (English)](../../docs/ops-runbook-install-usage.en.md)
+- [설치 및 사용법 (한국어)](../../docs/ops-runbook-install-usage.ko.md)
+
 ```sh
 sudo /usr/local/sbin/ops-runbook service restart nginx
 sudo /usr/local/sbin/ops-runbook service reload coredns

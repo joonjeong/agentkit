@@ -77,6 +77,37 @@ fn service_status_runs_fixed_systemctl_without_shell() {
     );
     let audit_log = fs::read_to_string(audit).expect("audit log");
     assert!(audit_log.contains("caller=hermes action=service_status target=nginx result=allow"));
+    assert!(audit_log.contains(
+        "caller=hermes action=service_status target=nginx result=executed reason=exit_code=0"
+    ));
+
+    fs::remove_dir_all(temp).expect("temporary directory removed");
+}
+
+#[test]
+fn policy_check_rejects_unknown_policy_fields() {
+    let temp = temp_dir("ops-runbook-unknown-policy-field");
+    let policy = write_policy(
+        &temp,
+        r#"
+version = 1
+
+[defaults]
+max_log_lines = 1000
+
+[callers.hermes]
+service_restarts = ["nginx"]
+"#,
+    );
+
+    Command::cargo_bin("ops-runbook")
+        .expect("binary exists")
+        .args(["policy", "check"])
+        .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
+        .env("OPS_RUNBOOK_POLICY_PATH", &policy)
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("unknown field"));
 
     fs::remove_dir_all(temp).expect("temporary directory removed");
 }

@@ -138,7 +138,11 @@ fn caller_from_sudo() -> Result<String> {
 
 fn check_policy(policy_path: &Path) -> Result<i32> {
     let config = load_valid_config(policy_path)?;
-    let mut callers = config.callers.keys().cloned().collect::<Vec<_>>();
+    let mut callers = config
+        .callers
+        .keys()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
     callers.sort();
     println!("policy OK: {}", policy_path.display());
     println!("callers: {}", callers.join(", "));
@@ -225,10 +229,22 @@ fn execute(
 
     audit::write(&audit_path, &caller, action.as_str(), target, "allow", None)?;
 
-    match action {
+    let exit_code = match action {
         Action::ServiceRestart => runner::systemctl("restart", target),
         Action::ServiceReload => runner::systemctl("reload", target),
         Action::ServiceStatus => runner::systemctl("status", target),
         Action::Logs => runner::journalctl(target, lines),
-    }
+    }?;
+
+    let outcome = format!("exit_code={exit_code}");
+    audit::write(
+        &audit_path,
+        &caller,
+        action.as_str(),
+        target,
+        "executed",
+        Some(&outcome),
+    )?;
+
+    Ok(exit_code)
 }

@@ -27,17 +27,21 @@ pub fn write(
     result: &str,
     reason: Option<&str>,
 ) -> Result<()> {
-    let mut file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(path)
-        .map_err(|source| Error::Io {
-            path: path.to_owned(),
-            source,
-        })?;
+    let mut options = OpenOptions::new();
+    options.create(true).append(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
 
-    let timestamp = OffsetDateTime::now_local()
-        .unwrap_or_else(|_| OffsetDateTime::now_utc())
+        options.mode(0o640);
+    }
+
+    let mut file = options.open(path).map_err(|source| Error::Io {
+        path: path.to_owned(),
+        source,
+    })?;
+
+    let timestamp = OffsetDateTime::now_utc()
         .format(&Rfc3339)
         .unwrap_or_else(|_| "unknown-time".to_owned());
 
