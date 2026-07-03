@@ -8,6 +8,7 @@ description = "Policy-driven restricted executor for homelab operations"
 
 [dependencies]
 clap = { version = "4.5.53", features = ["derive", "env"] }
+libc = "0.2.186"
 serde = { version = "1.0.228", features = ["derive"] }
 thiserror = "2.0.17"
 time = { version = "0.3.44", features = ["formatting", "local-offset"] }

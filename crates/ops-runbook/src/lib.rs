@@ -1,4 +1,5 @@
 mod audit;
+mod bootstrap;
 mod cli;
 mod config;
 mod error;

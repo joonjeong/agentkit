@@ -25,6 +25,12 @@ pub enum Error {
     #[error("invalid action: {0}")]
     InvalidAction(String),
 
+    #[error("invalid bootstrap option: {0}")]
+    InvalidBootstrapOption(String),
+
+    #[error("bootstrap must be run as root")]
+    BootstrapRequiresRoot,
+
     #[error("invalid log line count: {0}")]
     InvalidLineCount(u32),
 
@@ -45,6 +51,9 @@ pub enum Error {
 
     #[error("command failed to start: {0}")]
     CommandStart(std::io::Error),
+
+    #[error("command failed: {program} {args}")]
+    CommandFailed { program: String, args: String },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

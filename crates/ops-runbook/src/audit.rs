@@ -7,7 +7,7 @@ use time::OffsetDateTime;
 
 use crate::error::{Error, Result};
 
-const DEFAULT_AUDIT_LOG_PATH: &str = "/var/log/ops-runbook/audit.log";
+pub const DEFAULT_AUDIT_LOG_PATH: &str = "/var/log/ops-runbook/audit.log";
 
 pub fn configured_audit_log_path() -> PathBuf {
     if cfg!(debug_assertions) && std::env::var_os("OPS_RUNBOOK_TEST_OVERRIDES").is_some() {

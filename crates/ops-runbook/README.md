@@ -25,8 +25,28 @@ Build:
 cargo build --release --bin ops-runbook
 ```
 
-Deployment scaffolding lives under `ansible/`. The sudoers template grants only:
+Bootstrap a host directly from a downloaded or locally copied binary:
+
+```sh
+sudo ./ops-runbook bootstrap --user hermes --user openclaw
+```
+
+`bootstrap` installs the current executable to `/usr/local/sbin/ops-runbook`,
+creates the `ops-agent` group, adds existing `--user` accounts to the group,
+writes the default policy, writes sudoers, and writes logrotate config.
+
+The generated sudoers rule grants only:
 
 ```sudoers
-%ops-agent ALL=(root) NOPASSWD: /usr/local/sbin/ops-runbook
+%ops-agent ALL=(root) NOPASSWD: /usr/local/sbin/ops-runbook service restart *, /usr/local/sbin/ops-runbook service reload *, /usr/local/sbin/ops-runbook service status *, /usr/local/sbin/ops-runbook logs *, /usr/local/sbin/ops-runbook policy check, /usr/local/sbin/ops-runbook policy explain *, /usr/local/sbin/ops-runbook version
 ```
+
+Useful bootstrap options:
+
+- `--binary-path /usr/local/sbin/ops-runbook`
+- `--source-binary /path/to/ops-runbook`
+- `--sudoers-path /etc/sudoers.d/ops-agent`
+- `--policy-path /etc/ops-runbook/policy.toml`
+- `--audit-log-path /var/log/ops-runbook/audit.log`
+- `--sudo-log-path /var/log/ops-runbook/sudo.log`
+- `--group ops-agent`

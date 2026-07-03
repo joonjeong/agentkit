@@ -154,6 +154,85 @@ fn direct_root_execution_is_rejected() {
     fs::remove_dir_all(temp).expect("temporary directory removed");
 }
 
+#[test]
+fn bootstrap_installs_binary_and_writes_configurable_files() {
+    let temp = temp_dir("ops-runbook-bootstrap");
+    let source_binary = temp.join("source/ops-runbook");
+    let binary = temp.join("bin/ops-runbook");
+    let sudoers = temp.join("sudoers/custom-ops-agent");
+    let policy = temp.join("etc/policy.toml");
+    let audit_log = temp.join("logs/audit.log");
+    let sudo_log = temp.join("logs/sudo.log");
+    let logrotate = temp.join("logrotate/ops-runbook");
+    fs::create_dir(source_binary.parent().expect("source parent")).expect("source parent created");
+    fs::write(&source_binary, b"fake ops-runbook binary").expect("source binary written");
+
+    Command::cargo_bin("ops-runbook")
+        .expect("binary exists")
+        .args([
+            "bootstrap",
+            "--skip-system-accounts",
+            "--skip-visudo",
+            "--source-binary",
+            source_binary.to_str().expect("utf-8 path"),
+            "--group",
+            "custom-ops",
+            "--binary-path",
+            binary.to_str().expect("utf-8 path"),
+            "--sudoers-path",
+            sudoers.to_str().expect("utf-8 path"),
+            "--policy-path",
+            policy.to_str().expect("utf-8 path"),
+            "--audit-log-path",
+            audit_log.to_str().expect("utf-8 path"),
+            "--sudo-log-path",
+            sudo_log.to_str().expect("utf-8 path"),
+            "--logrotate-path",
+            logrotate.to_str().expect("utf-8 path"),
+        ])
+        .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("sudoers ready:"));
+
+    assert_eq!(
+        fs::read(&binary).expect("installed binary"),
+        b"fake ops-runbook binary"
+    );
+    let sudoers_contents = fs::read_to_string(&sudoers).expect("sudoers written");
+    assert!(sudoers_contents.contains("Defaults:%custom-ops"));
+    assert!(sudoers_contents.contains(&format!("logfile=\"{}\"", sudo_log.display())));
+    assert!(sudoers_contents.contains(&format!("{} service restart *", binary.display())));
+    assert!(sudoers_contents.contains(&format!("{} policy explain *", binary.display())));
+    assert!(!sudoers_contents.contains(" bootstrap"));
+
+    let policy_contents = fs::read_to_string(policy).expect("policy written");
+    assert!(policy_contents.contains("[callers.hermes]"));
+
+    let logrotate_contents = fs::read_to_string(logrotate).expect("logrotate written");
+    assert!(logrotate_contents.contains(&audit_log.display().to_string()));
+    assert!(logrotate_contents.contains(&sudo_log.display().to_string()));
+
+    fs::remove_dir_all(temp).expect("temporary directory removed");
+}
+
+#[test]
+fn bootstrap_rejects_relative_sudoers_paths() {
+    Command::cargo_bin("ops-runbook")
+        .expect("binary exists")
+        .args([
+            "bootstrap",
+            "--skip-system-accounts",
+            "--skip-visudo",
+            "--sudoers-path",
+            "relative/sudoers",
+        ])
+        .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--sudoers-path must be absolute"));
+}
+
 fn temp_dir(prefix: &str) -> PathBuf {
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)

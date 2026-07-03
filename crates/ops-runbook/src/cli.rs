@@ -4,6 +4,7 @@ use std::path::Path;
 use clap::{Args, Parser, Subcommand};
 
 use crate::audit;
+use crate::bootstrap::{self, BootstrapArgs};
 use crate::config::{configured_policy_path, Config};
 use crate::error::{Error, Result};
 use crate::policy::{is_allowed, validate_target, Action};
@@ -23,6 +24,8 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Bootstrap local installation, policy, sudoers, logrotate, and group access.
+    Bootstrap(BootstrapArgs),
     /// Manage allowlisted systemd services.
     Service(ServiceCommand),
     /// Show allowlisted service logs from journald.
@@ -89,6 +92,7 @@ where
     let policy_path = configured_policy_path();
 
     match cli.command {
+        Command::Bootstrap(args) => bootstrap::run(args),
         Command::Service(command) => match command.command {
             ServiceSubcommand::Restart(args) => {
                 execute(Action::ServiceRestart, &args.service, None, &policy_path)

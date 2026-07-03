@@ -113,7 +113,20 @@ Build it with:
 cargo build --release --bin ops-runbook
 ```
 
-Deployment scaffolding is under `crates/ops-runbook/ansible`.
+An admin can bootstrap a host directly from a downloaded or locally copied
+binary:
+
+```sh
+sudo ./ops-runbook bootstrap --user hermes --user openclaw
+```
+
+`bootstrap` installs the current binary to `--binary-path`, creates the group,
+updates existing users passed with `--user`, creates config/log directories,
+writes the sample policy, writes the sudoers rule, and writes logrotate config.
+Paths embedded in sudoers can be adjusted with options such as `--binary-path`,
+`--sudoers-path`, `--policy-path`, `--audit-log-path`, `--sudo-log-path`, and
+`--group`. The generated sudoers rule allows only the operational subcommands
+and does not allow `%ops-agent` to run `bootstrap`.
 
 `github app-run` uses the same token minting inputs as `app-auth`, but runs a
 command with the temporary installation token set as both `GH_TOKEN` and
