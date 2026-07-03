@@ -9,7 +9,8 @@ having to reshape the repository later.
 
 ```text
 crates/
-  toolbox/   busybox-style entrypoint and shared command dispatcher
+  toolbox/       busybox-style entrypoint and shared command dispatcher
+  ops-runbook/   policy-driven restricted executor for homelab operations
 ```
 
 The primary binary is `toolbox`. Commands can be used in three forms:
@@ -86,6 +87,33 @@ Useful options:
 Public release downloads can be tested without authentication. GitHub App auth
 must be tested against a repository where the App is installed, even if the
 repository itself is public.
+
+## ops-runbook
+
+`ops-runbook` is a separate binary for allowing automation agents such as
+Hermes or OpenClaw to perform a narrow set of root operations through sudo:
+
+```sh
+sudo /usr/local/sbin/ops-runbook service restart nginx
+sudo /usr/local/sbin/ops-runbook service reload coredns
+sudo /usr/local/sbin/ops-runbook service status cloudflared
+sudo /usr/local/sbin/ops-runbook logs nginx --lines 200
+sudo /usr/local/sbin/ops-runbook policy check
+sudo /usr/local/sbin/ops-runbook policy explain service_restart nginx
+```
+
+It reads `/etc/ops-runbook/policy.toml`, determines the real caller from
+`SUDO_USER`, rejects direct root execution, validates service targets, writes an
+audit log to `/var/log/ops-runbook/audit.log`, and then runs fixed
+`systemctl`/`journalctl` command paths without a shell.
+
+Build it with:
+
+```sh
+cargo build --release --bin ops-runbook
+```
+
+Deployment scaffolding is under `crates/ops-runbook/ansible`.
 
 `github app-run` uses the same token minting inputs as `app-auth`, but runs a
 command with the temporary installation token set as both `GH_TOKEN` and

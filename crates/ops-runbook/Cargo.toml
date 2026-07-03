@@ -1,0 +1,18 @@
+[package]
+name = "ops-runbook"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Policy-driven restricted executor for homelab operations"
+
+[dependencies]
+clap = { version = "4.5.53", features = ["derive", "env"] }
+serde = { version = "1.0.228", features = ["derive"] }
+thiserror = "2.0.17"
+time = { version = "0.3.44", features = ["formatting", "local-offset"] }
+toml = "0.9.8"
+
+[dev-dependencies]
+assert_cmd = "2.1.1"
+predicates = "3.1.3"

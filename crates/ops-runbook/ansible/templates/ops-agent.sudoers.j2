@@ -1,0 +1,7 @@
+Defaults:%ops-agent !requiretty
+Defaults:%ops-agent secure_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+Defaults:%ops-agent env_reset
+Defaults:%ops-agent log_output
+Defaults:%ops-agent logfile="/var/log/ops-runbook/sudo.log"
+
+%ops-agent ALL=(root) NOPASSWD: /usr/local/sbin/ops-runbook

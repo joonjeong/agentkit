@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/toolbox"]
+members = ["crates/toolbox", "crates/ops-runbook"]
 resolver = "2"
 
 [workspace.package]

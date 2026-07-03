@@ -1,0 +1,16 @@
+version = 1
+
+[defaults]
+max_log_lines = 1000
+
+[callers.hermes]
+service_restart = ["nginx", "coredns", "cloudflared"]
+service_reload = ["nginx", "coredns"]
+service_status = ["nginx", "coredns", "cloudflared"]
+logs = ["nginx", "coredns", "cloudflared"]
+
+[callers.openclaw]
+service_restart = ["openclaw", "myriad-bot"]
+service_reload = []
+service_status = ["openclaw", "myriad-bot"]
+logs = ["openclaw", "myriad-bot"]

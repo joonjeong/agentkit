@@ -1,0 +1,84 @@
+- name: Deploy ops-runbook
+  hosts: homelab
+  become: true
+
+  vars:
+    ops_runbook_path: "/usr/local/sbin/ops-runbook"
+    ops_agent_users:
+      - hermes
+      - openclaw
+
+  tasks:
+    - name: Select ops-runbook binary by architecture
+      ansible.builtin.set_fact:
+        ops_runbook_src: >-
+          {{
+            '../target/aarch64-unknown-linux-gnu/release/ops-runbook'
+            if ansible_architecture in ['aarch64', 'arm64']
+            else '../target/x86_64-unknown-linux-gnu/release/ops-runbook'
+          }}
+
+    - name: Ensure ops-agent group exists
+      ansible.builtin.group:
+        name: ops-agent
+        system: true
+        state: present
+
+    - name: Ensure ops-runbook config directory exists
+      ansible.builtin.file:
+        path: /etc/ops-runbook
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Ensure ops-runbook log directory exists
+      ansible.builtin.file:
+        path: /var/log/ops-runbook
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install ops-runbook binary
+      ansible.builtin.copy:
+        src: "{{ ops_runbook_src }}"
+        dest: "{{ ops_runbook_path }}"
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install sudoers rule for ops-agent
+      ansible.builtin.template:
+        src: templates/ops-agent.sudoers.j2
+        dest: /etc/sudoers.d/ops-agent
+        owner: root
+        group: root
+        mode: "0440"
+        validate: "visudo -cf %s"
+
+    - name: Install ops-runbook policy
+      ansible.builtin.template:
+        src: templates/policy.toml.j2
+        dest: /etc/ops-runbook/policy.toml
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Install logrotate config
+      ansible.builtin.template:
+        src: templates/logrotate.j2
+        dest: /etc/logrotate.d/ops-runbook
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Ensure agent users exist and join ops-agent group
+      ansible.builtin.user:
+        name: "{{ item }}"
+        system: true
+        create_home: true
+        shell: /bin/bash
+        groups: ops-agent
+        append: true
+      loop: "{{ ops_agent_users }}"
