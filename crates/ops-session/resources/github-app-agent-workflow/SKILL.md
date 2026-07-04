@@ -1,179 +1,80 @@
 ---
 name: github-app-agent-workflow
-description: Perform GitHub agent work through ops-session without exposing temporary installation tokens. Use when an agent or automation needs to work on issues, pull requests, releases, or repository API calls through GitHub App credentials while avoiding personal access tokens, token stdout, shell exports, persistent gh login, shell history leaks, or accidental token logging.
+description: Perform GitHub agent work through ops-session github without exposing temporary installation tokens.
 ---
 
 # GitHub App Agent Workflow
 
-Use `ops-session` to run GitHub commands inside a short-lived GitHub
-App installation token context without printing the token or exporting it into
-the parent shell.
-
-Prefer this skill when GitHub access should come from a GitHub App installation
-rather than a personal token. The default workflow is token-non-disclosure:
-`ops-session` obtains the installation token, injects it into the child process as
-`GH_TOKEN` and `GITHUB_TOKEN`, removes GitHub App credential environment
-variables from the child environment, and exits with the child command status.
-When a matching local cache entry exists, `ops-session` checks its expiration and
-validates it with GitHub before reuse; rejected or expired cached tokens are
-replaced automatically.
-
-Do not ask the agent to print, copy, paste, log, persist, or manually export the
-temporary installation token. Use `ops-session` for each GitHub command or each
-explicit shell command group.
+Use `ops-session github` to run GitHub commands inside a short-lived GitHub App
+installation token context without printing the token or exporting it into the
+parent shell.
 
 ## Command Forms
 
-Use any supported `ops-session` invocation form:
-
 ```sh
-ops-session [OPTIONS] -- COMMAND [ARG]...
-```
-
-When scripting for portability, prefer `ops-session`.
-
-To create this skill in another agent's skills directory, run:
-
-```sh
+ops-session github [OPTIONS] -- COMMAND [ARG]...
+ops-session github app-auth [OPTIONS]
 ops-session agent-skill --install-path /path/to/skills
 ```
 
-## Required Inputs
+Use `ops-session github ... -- COMMAND` for ordinary agent work. Use
+`ops-session github app-auth` only for diagnostics or integrations that
+explicitly need token stdout.
 
-Provide:
+## Configuration
+
+GitHub App credential material comes from a config file. The default path is
+`/etc/ops-session/github.toml`; override it with `--config-path` or
+`OPS_SESSION_GITHUB_CONFIG_PATH`.
+
+```toml
+app_id = 123456
+private_key_path = "/etc/ops-session/github-app.private-key.pem"
+api_url = "https://api.github.com"
+repos = ["OWNER/REPO"]
+
+[permissions]
+contents = "read"
+pull_requests = "read"
+```
+
+The private key path is read only from `private_key_path` in this config file.
+Do not pass private key paths or private key contents through shell arguments or
+environment variables.
+
+Non-secret values can be overridden per invocation:
 
 - `--app-id` or `GITHUB_APP_ID`
+- `--installation-id` or `GITHUB_APP_INSTALLATION_ID`
+- `--api-url` or `GITHUB_API_URL`
 - `--repo OWNER/REPO`
-- exactly one private key source:
-  - `--private-key-file` or `GITHUB_APP_PRIVATE_KEY_FILE`
-  - `--private-key-path` or `GITHUB_APP_PRIVATE_KEY_PATH`
-  - `--private-key` or `GITHUB_APP_PRIVATE_KEY`
+- `--permission key=value`
 
-Prefer `--private-key-file` or `--private-key-path` in shell commands so PEM
-contents do not appear in shell history or process listings.
-
-For Ciel/Hermes-compatible environments that provide a private key path:
+## Examples
 
 ```sh
-ops-session \
+ops-session github \
   --repo OWNER/REPO \
-  --app-id "$GITHUB_APP_ID" \
-  --private-key-file "$GITHUB_APP_PRIVATE_KEY_PATH" \
+  --permission contents=read \
   -- gh pr view 123 --repo OWNER/REPO
 ```
 
-## Preferred `gh` Workflows
-
-Run each `gh` command through `ops-session`. This avoids token stdout and avoids
-leaving `GH_TOKEN` in the parent shell:
-
 ```sh
-ops-session \
+ops-session github \
   --repo OWNER/REPO \
-  --app-id "$GITHUB_APP_ID" \
-  --private-key-file /path/to/private-key.pem \
-  -- gh pr view 123 --repo OWNER/REPO
+  --git-credentials \
+  -- git remote update
 ```
 
-For issue or PR triage, request only the permissions needed for that read-only
-operation:
+`ops-session github` executes the command after `--` directly. For pipes,
+redirects, shell functions, aliases, variables, or grouped commands, invoke a
+shell explicitly:
 
 ```sh
-ops-session \
+ops-session github \
   --repo OWNER/REPO \
-  --app-id "$GITHUB_APP_ID" \
-  --permission contents=read \
-  --permission pull_requests=read \
-  --private-key-file /path/to/private-key.pem \
-  -- gh pr checks 123 --repo OWNER/REPO
-```
-
-For a write workflow, scope the token to the smallest repository and permission
-set that covers the operation:
-
-```sh
-ops-session \
-  --repo OWNER/REPO \
-  --app-id "$GITHUB_APP_ID" \
-  --permission issues=write \
-  --permission pull_requests=write \
-  --private-key-file /path/to/private-key.pem \
-  -- gh pr comment 123 --repo OWNER/REPO --body-file /tmp/comment.md
-```
-
-Use `gh api` the same way:
-
-```sh
-ops-session \
-  --repo OWNER/REPO \
-  --app-id "$GITHUB_APP_ID" \
-  --permission actions=read \
-  --permission contents=read \
-  --private-key-file /path/to/private-key.pem \
-  -- gh api repos/OWNER/REPO/actions/runs --jq '.workflow_runs[0].status'
-```
-
-Pass `OWNER/REPO` for readability. The command sends only repository names to
-GitHub's installation token API, as required by GitHub.
-
-## Grouped Commands
-
-`ops-session` executes the command after `--` directly. It does not invoke a shell.
-Pipes, redirects, shell functions, aliases, variable assignments, and command
-groups require an explicit shell:
-
-```sh
-ops-session \
-  --repo OWNER/REPO \
-  --app-id "$GITHUB_APP_ID" \
-  --private-key-file /path/to/private-key.pem \
   -- sh -c 'gh pr view "$1" --repo "$2" --json title,url | jq .url' sh 123 OWNER/REPO
 ```
-
-For several related `gh` commands, use one explicit shell command group. The
-token remains inside that child process tree and never appears in the parent
-shell:
-
-```sh
-ops-session \
-  --repo OWNER/REPO \
-  --app-id "$GITHUB_APP_ID" \
-  --permission contents=read \
-  --permission pull_requests=read \
-  --private-key-file /path/to/private-key.pem \
-  -- sh -c '
-    set -eu
-    gh pr view "$1" --repo "$2"
-    gh pr checks "$1" --repo "$2"
-    gh pr diff "$1" --repo "$2" --name-only
-  ' sh 123 OWNER/REPO
-```
-
-Keep grouped command blocks short and task-focused. Start a new `ops-session`
-invocation when repository scope changes, privileges should be narrower, or a
-command fails due to expiration.
-
-## Git HTTPS Remotes
-
-Git does not automatically read `GH_TOKEN` or `GITHUB_TOKEN` as HTTPS remote
-credentials. When running `git clone`, `git fetch`, `git ls-remote`, or similar
-commands against GitHub HTTPS URLs, pass `--git-credentials`:
-
-```sh
-ops-session \
-  --repo OWNER/REPO \
-  --permission contents=read \
-  --app-id "$GITHUB_APP_ID" \
-  --private-key-file /path/to/private-key.pem \
-  --git-credentials \
-  -- git ls-remote --heads https://github.com/OWNER/REPO.git
-```
-
-`--git-credentials` installs a temporary child-only Git credential helper. The
-helper reads the installation token from the child `GITHUB_TOKEN`, responds only
-to HTTPS credential requests for the GitHub host, and uses username
-`x-access-token`. It also disables interactive Git credential prompts for the
-child command, so failed authentication exits instead of hanging.
 
 ## Environment Boundary
 
@@ -183,136 +84,19 @@ The child command receives:
 - `GITHUB_TOKEN` set to the same temporary installation token
 - when `--git-credentials` is passed, child-only `GIT_CONFIG_*` values pointing
   at a temporary credential helper and `GIT_TERMINAL_PROMPT=0`
-- ordinary inherited environment such as `PATH`, locale, and working directory
 
-The child command does not receive these GitHub App credential variables:
-
-- `GITHUB_APP_ID`
-- `GITHUB_APP_INSTALLATION_ID`
-- `GITHUB_APP_PRIVATE_KEY`
-- `GITHUB_APP_PRIVATE_KEY_FILE`
-- `GITHUB_APP_PRIVATE_KEY_PATH`
-- `GITHUB_API_URL`
-
-Do not re-export those variables into the child command unless explicitly
-debugging the authentication flow. The child should operate with the scoped
-installation token only.
-
-`ops-session` may reuse a matching locally cached installation token until it is
-near expiration. The cache is keyed by app, installation selector, API URL,
-repository scope, and requested permissions. Reuse still keeps the token inside
-the `ops-session` child environment; it does not print the token or export it into
-the parent shell.
-
-## Authentication Diagnostics
-
-Avoid direct token output during ordinary agent work. `ops-session app-auth`
-is primarily for debugging GitHub App authentication behavior: JWT signing,
-installation discovery, installation token exchange, requested permissions, and
-repository scoping. It prints a valid installation token to stdout by default,
-so that output can leak through logs, shell tracing, command substitution,
-process environments, terminal scrollback, or copy/paste.
-
-Only use `app-auth` when diagnosing the app-based authentication flow or when an
-external integration truly requires the token string and has a concrete
-secret-safe destination. Prefer this command for ordinary agent GitHub work:
-
-```sh
-ops-session \
-  --repo OWNER/REPO \
-  --app-id "$GITHUB_APP_ID" \
-  --private-key-file /path/to/private-key.pem \
-  -- gh pr view 123 --repo OWNER/REPO
-```
-
-If `app-auth` is unavoidable, treat the session as a debugging or integration
-boundary: disable shell tracing, never log stdout, and do not persist the token
-with `gh auth login --with-token` unless persistent local authentication is
-explicitly intended and cleaned up afterward.
-
-Print only the GitHub App JWT for debugging:
-
-```sh
-ops-session app-auth --jwt-only \
-  --app-id "$GITHUB_APP_ID" \
-  --private-key-file /path/to/private-key.pem
-```
-
-Do not paste JWT output into issue comments, PR comments, build logs, or chat.
-
-For structured automation diagnostics:
-
-```sh
-ops-session app-auth \
-  --repo OWNER/REPO \
-  --app-id "$GITHUB_APP_ID" \
-  --private-key-file /path/to/private-key.pem \
-  --format json
-```
-
-JSON output is diagnostic-first and never includes the installation token.
-
-## Options To Remember
-
-- `--api-url` or `GITHUB_API_URL`: override for GitHub Enterprise Server token
-  minting. This does not configure the child command's GitHub host; for `gh`
-  Enterprise usage, set the appropriate `GH_HOST` or pass an explicit
-  `--repo HOST/OWNER/REPO` form when needed.
-- `--repo OWNER/REPO`: scope the token to a repository. Repeat `--repo` for
-  multiple repositories. Without `--installation-id`, the first `--repo` value
-  is also used to discover the app installation.
-- `--installation-id`: use a known installation ID and skip repository
-  installation discovery.
-- `--permission key=value`: repeat to request narrower token permissions.
-- `--git-credentials`: configure child-only Git HTTPS credentials for GitHub
-  remotes. Use this for `git clone`, `git fetch`, `git ls-remote`, and similar
-  commands against HTTPS URLs.
-- `--format json` and `--jwt-only` belong to `app-auth`, not `ops-session`.
-
-## Common Failure Cases
-
-- The App is not installed on the repository or owning account. A public
-  repository can still return `404` from installation discovery because public
-  release/download access is unrelated to GitHub App installation access.
-- Requested permissions are broader than the installation allows. Ask for equal
-  or narrower permissions, or update the App installation permissions first.
-- The token expired or GitHub rejects a cached token. `ops-session` should
-  automatically mint a fresh scoped token.
-- Git over HTTPS failed with a username prompt error such as `could not read
-  Username`. Rerun with `--git-credentials`; `GH_TOKEN` and `GITHUB_TOKEN` alone
-  are not Git credential helpers.
-- The private key path or environment variable is missing. Check
-  `--private-key-file`, `--private-key-path`, `GITHUB_APP_PRIVATE_KEY_FILE`, and
-  `GITHUB_APP_PRIVATE_KEY_PATH`.
-- Shell syntax was passed directly after `--`. Use `-- sh -c '...'` for pipes,
-  redirects, aliases, shell functions, and grouped commands.
+`ops-session github` may reuse a matching locally cached installation token
+until it is near expiration. The cache is keyed by app, installation selector,
+API URL, repository scope, and requested permissions.
 
 ## Operational Notes
 
-- Use `ops-session` for ordinary agent GitHub work; do not export `GH_TOKEN`
-  manually.
-- Treat `app-auth` as a diagnostic command for app-based authentication behavior
-  unless a non-agent integration explicitly needs token stdout.
 - Scope tokens with `--repo OWNER/REPO` whenever possible.
 - Request only the permissions needed by the child command.
-- Do not use `--private-key` in shell commands; it can leak through shell
-  history or process listings. Prefer `--private-key-file` or
-  `--private-key-path`.
-- Do not log stdout from `ops-session app-auth`; it may be the token.
-- Do not persist temporary app tokens with `gh auth login` unless explicitly
-  required and cleaned up afterward.
-- Treat the GitHub App private key as a high-value secret. A short-lived
-  installation token does not make the private key safe to expose.
-- Review the GitHub App installation permissions and repository access. A token
-  inherits those permissions, so a compromised token can still perform any
-  allowed write actions during its lifetime.
-- `--jwt-only` is for debugging app authentication only. A JWT can mint
-  installation tokens while valid.
+- Do not log stdout from `ops-session github app-auth`; it may be the token.
+- Git over HTTPS needs `--git-credentials`; `GH_TOKEN` and `GITHUB_TOKEN` are
+  not Git credential helpers by themselves.
 - The HTTP client uses a finite timeout, so automation should fail instead of
   hanging indefinitely.
 - The JWT is intentionally short-lived and remains below GitHub's 10-minute
   maximum lifetime.
-- Public release downloads can be tested without authentication. GitHub App auth
-  can only be fully tested against a repository where the App is installed.
-- Run `ops-session --help` before changing scripts; the help output
-  is the command contract for agent usage.

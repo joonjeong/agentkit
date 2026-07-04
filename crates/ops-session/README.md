@@ -1,36 +1,43 @@
 # ops-session
 
-`ops-session` runs a command with a temporary GitHub App installation token.
-For now, GitHub App authentication is the only supported session provider.
+`ops-session` runs a command inside an authenticated provider session. The
+current provider is GitHub App authentication:
 
 ```sh
-ops-session \
+ops-session github \
   --app-id "$GITHUB_APP_ID" \
   --repo OWNER/REPO \
-  --private-key-file /path/to/private-key.pem \
   -- git remote update
 ```
 
-The command after `--` inherits stdin, stdout, stderr, the current working
-directory, `PATH`, and ordinary environment variables. GitHub App credential
-environment variables are removed from the child environment, and the scoped
-installation token is injected as both `GH_TOKEN` and `GITHUB_TOKEN`.
+GitHub credentials are read from a config file. The default path is
+`/etc/ops-session/github.toml`; override it with `--config-path` or
+`OPS_SESSION_GITHUB_CONFIG_PATH`.
 
-Supported environment variables:
+```toml
+app_id = 123456
+private_key_path = "/etc/ops-session/github-app.private-key.pem"
+api_url = "https://api.github.com"
+repos = ["OWNER/REPO"]
 
-- `GITHUB_APP_ID`
-- `GITHUB_APP_INSTALLATION_ID`
-- `GITHUB_APP_PRIVATE_KEY_FILE`
-- `GITHUB_APP_PRIVATE_KEY_PATH`
-- `GITHUB_APP_PRIVATE_KEY`
-- `GITHUB_API_URL`
+[permissions]
+contents = "read"
+```
+
+`app_id`, `installation_id`, `api_url`, `repos`, and `permissions` can be set in
+the config file. `--app-id`, `GITHUB_APP_ID`, `--installation-id`,
+`GITHUB_APP_INSTALLATION_ID`, `--api-url`, `GITHUB_API_URL`, `--repo`, and
+`--permission` override non-secret config values. The private key path is only
+read from `private_key_path` in the config file.
+
+The child command inherits stdin, stdout, stderr, the current working directory,
+`PATH`, and ordinary environment variables. The scoped installation token is
+injected as both `GH_TOKEN` and `GITHUB_TOKEN`.
 
 Useful options:
 
 - `--repo OWNER/REPO` scopes the token to a repository. Repeat `--repo` for
   multiple repositories.
-- `--installation-id ID` skips repository installation discovery when the
-  installation ID is already known.
 - `--permission key=value` limits token permissions, for example
   `--permission contents=read`.
 - `--git-credentials` configures a child-only Git credential helper for HTTPS
@@ -40,10 +47,8 @@ Shell syntax such as pipes, redirects, aliases, and shell functions requires an
 explicit shell command:
 
 ```sh
-ops-session \
-  --app-id "$GITHUB_APP_ID" \
+ops-session github \
   --repo OWNER/REPO \
-  --private-key-file /path/to/private-key.pem \
   -- sh -c 'gh issue view 123 | jq .url'
 ```
 
@@ -53,10 +58,8 @@ in automation.
 Diagnostic token output is available when needed:
 
 ```sh
-ops-session app-auth \
-  --app-id "$GITHUB_APP_ID" \
+ops-session github app-auth \
   --repo OWNER/REPO \
-  --private-key-file /path/to/private-key.pem \
   --format json
 ```
 

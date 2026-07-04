@@ -23,7 +23,7 @@ fn shows_top_level_help() {
             .and(predicate::str::contains("app-auth"))
             .and(predicate::str::contains("ops-session"))
             .and(predicate::str::contains("agent-skill"))
-            .and(predicate::str::contains("ops-session app-auth [OPTIONS]")),
+            .and(predicate::str::contains("ops-session github [OPTIONS]")),
     );
 }
 
@@ -46,28 +46,30 @@ fn shows_version() {
 fn shows_github_app_auth_agent_usage() {
     let mut cmd = Command::cargo_bin("ops-session").expect("binary exists");
 
-    cmd.args(["app-auth", "--help"]).assert().success().stdout(
-        predicate::str::contains("Sign a GitHub App JWT")
-            .and(predicate::str::contains(
-                "debugging app-based authentication behavior",
-            ))
-            .and(predicate::str::contains("ops-session"))
-            .and(predicate::str::contains("--format json"))
-            .and(predicate::str::contains("GITHUB_APP_PRIVATE_KEY_FILE"))
-            .and(predicate::str::contains("GITHUB_APP_PRIVATE_KEY_PATH"))
-            .and(predicate::str::contains("--repo <OWNER/REPO>"))
-            .and(predicate::str::contains(
-                "--installation-id <INSTALLATION_ID>",
-            ))
-            .and(predicate::str::contains("GITHUB_APP_INSTALLATION_ID"))
-            .and(predicate::str::contains("Repeat for multiple repositories"))
-            .and(predicate::str::contains("only repository names are sent"))
-            .and(predicate::str::contains("--repository").not())
-            .and(predicate::str::contains("--shell").not())
-            .and(predicate::str::contains("--export-gh-token").not())
-            .and(predicate::str::contains("--include-token").not())
-            .and(predicate::str::contains("export GH_TOKEN").not()),
-    );
+    cmd.args(["github", "app-auth", "--help"])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("Sign a GitHub App JWT")
+                .and(predicate::str::contains(
+                    "debugging app-based authentication behavior",
+                ))
+                .and(predicate::str::contains("ops-session"))
+                .and(predicate::str::contains("--format json"))
+                .and(predicate::str::contains("OPS_SESSION_GITHUB_CONFIG_PATH"))
+                .and(predicate::str::contains("--repo <OWNER/REPO>"))
+                .and(predicate::str::contains(
+                    "--installation-id <INSTALLATION_ID>",
+                ))
+                .and(predicate::str::contains("GITHUB_APP_INSTALLATION_ID"))
+                .and(predicate::str::contains("Repeat for multiple repositories"))
+                .and(predicate::str::contains("only repository names are sent"))
+                .and(predicate::str::contains("--repository").not())
+                .and(predicate::str::contains("--shell").not())
+                .and(predicate::str::contains("--export-gh-token").not())
+                .and(predicate::str::contains("--include-token").not())
+                .and(predicate::str::contains("export GH_TOKEN").not()),
+        );
 }
 
 #[test]
@@ -75,8 +77,14 @@ fn shows_ops_session_agent_usage() {
     let mut cmd = Command::cargo_bin("ops-session").expect("binary exists");
 
     cmd.arg("--help").assert().success().stdout(
+        predicate::str::contains("Run a command in an authenticated operations session")
+            .and(predicate::str::contains("ops-session github [OPTIONS]"))
+            .and(predicate::str::contains("agent-skill")),
+    );
+
+    let mut github = Command::cargo_bin("ops-session").expect("binary exists");
+    github.args(["github", "--help"]).assert().success().stdout(
         predicate::str::contains("Sign a GitHub App JWT")
-            .and(predicate::str::contains("ops-session"))
             .and(predicate::str::contains("ops-session"))
             .and(predicate::str::contains("GH_TOKEN"))
             .and(predicate::str::contains("GITHUB_TOKEN"))
@@ -96,70 +104,76 @@ fn ops_session_symlink_style_help_does_not_duplicate_subcommand_name() {
     assert!(output.status.success());
 
     let stdout = String::from_utf8(output.stdout).expect("stdout is utf-8");
-    assert!(stdout.contains("Usage: ops-session [OPTIONS]"));
+    assert!(stdout.contains("Usage: ops-session <COMMAND>"));
     assert!(!stdout.contains("ops-session ops-session [OPTIONS]"));
 }
 
 #[test]
-fn github_app_auth_requires_private_key() {
+fn github_app_auth_requires_config_private_key_path() {
     let mut cmd = Command::cargo_bin("ops-session").expect("binary exists");
+    let config_dir = unique_temp_dir("ops-session-config-test");
+    fs::create_dir(&config_dir).expect("config dir created");
+    let config_path = config_dir.join("github.toml");
+    fs::write(&config_path, "").expect("config written");
 
-    cmd.args(["app-auth", "--app-id", "1", "--repo", "OWNER/REPO"])
+    cmd.args(["github", "app-auth", "--config-path"])
+        .arg(&config_path)
+        .args(["--app-id", "1", "--repo", "OWNER/REPO"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("missing private key"));
+        .stderr(predicate::str::contains("missing private_key_path"));
+
+    fs::remove_dir_all(config_dir).expect("config dir removed");
 }
 
 #[test]
 fn github_app_auth_requires_repo_for_token_exchange() {
     let mut cmd = Command::cargo_bin("ops-session").expect("binary exists");
 
-    cmd.args([
-        "app-auth",
-        "--app-id",
-        "1",
-        "--private-key",
-        TEST_RSA_PRIVATE_KEY,
-    ])
-    .assert()
-    .failure()
-    .stderr(predicate::str::contains("--repo <OWNER/REPO>"));
+    let (config_dir, config_path) = write_github_config("ops-session-config-test");
+
+    cmd.args(["github", "app-auth", "--config-path"])
+        .arg(&config_path)
+        .args(["--app-id", "1"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "missing repository; set --repo OWNER/REPO",
+        ));
+
+    fs::remove_dir_all(config_dir).expect("config dir removed");
 }
 
 #[test]
 fn github_app_auth_jwt_only_does_not_require_installation_id() {
     let mut cmd = Command::cargo_bin("ops-session").expect("binary exists");
 
-    cmd.args([
-        "app-auth",
-        "--jwt-only",
-        "--app-id",
-        "1",
-        "--private-key",
-        TEST_RSA_PRIVATE_KEY,
-    ])
-    .assert()
-    .success()
-    .stdout(predicate::str::starts_with("eyJ"));
+    let (config_dir, config_path) = write_github_config("ops-session-config-test");
+
+    cmd.args(["github", "app-auth", "--config-path"])
+        .arg(&config_path)
+        .args(["--jwt-only", "--app-id", "1"])
+        .assert()
+        .success()
+        .stdout(predicate::str::starts_with("eyJ"));
+
+    fs::remove_dir_all(config_dir).expect("config dir removed");
 }
 
 #[test]
 fn github_app_auth_jwt_only_can_print_json() {
     let mut cmd = Command::cargo_bin("ops-session").expect("binary exists");
 
-    cmd.args([
-        "app-auth",
-        "--jwt-only",
-        "--format",
-        "json",
-        "--app-id",
-        "1",
-        "--private-key",
-        TEST_RSA_PRIVATE_KEY,
-    ])
-    .assert()
-    .success()
-    .stdout(predicate::str::starts_with("{\"jwt\":\"eyJ").and(predicate::str::contains("\"}")));
+    let (config_dir, config_path) = write_github_config("ops-session-config-test");
+
+    cmd.args(["github", "app-auth", "--config-path"])
+        .arg(&config_path)
+        .args(["--jwt-only", "--format", "json", "--app-id", "1"])
+        .assert()
+        .success()
+        .stdout(predicate::str::starts_with("{\"jwt\":\"eyJ").and(predicate::str::contains("\"}")));
+
+    fs::remove_dir_all(config_dir).expect("config dir removed");
 }
 
 #[cfg(unix)]
@@ -167,8 +181,12 @@ fn github_app_auth_jwt_only_can_print_json() {
 fn ops_session_runs_command_with_installation_token_environment() {
     let (api_url, server) = one_token_response_server();
     let mut cmd = Command::cargo_bin("ops-session").expect("binary exists");
+    let (config_dir, config_path) = write_github_config("ops-session-config-test");
 
     cmd.args([
+        "github",
+        "--config-path",
+        config_path.to_str().expect("utf-8 config path"),
         "--api-url",
         &api_url,
         "--",
@@ -178,7 +196,6 @@ fn ops_session_runs_command_with_installation_token_environment() {
          test \"$GITHUB_TOKEN\" = test-token && \
          test -z \"${GITHUB_APP_ID+x}\" && \
          test -z \"${GITHUB_APP_INSTALLATION_ID+x}\" && \
-         test -z \"${GITHUB_APP_PRIVATE_KEY+x}\" && \
          test \"$1\" = --body && \
          test \"$2\" = Done",
         "child-command",
@@ -187,13 +204,13 @@ fn ops_session_runs_command_with_installation_token_environment() {
     ])
     .env("GITHUB_APP_ID", "1")
     .env("GITHUB_APP_INSTALLATION_ID", "42")
-    .env("GITHUB_APP_PRIVATE_KEY", TEST_RSA_PRIVATE_KEY)
     .assert()
     .success();
 
     let request = server.join().expect("server thread completed");
     assert!(request.starts_with("post /app/installations/42/access_tokens "));
     assert!(request.contains("authorization: bearer "));
+    fs::remove_dir_all(config_dir).expect("config dir removed");
 }
 
 #[cfg(unix)]
@@ -204,8 +221,12 @@ fn ops_session_can_configure_child_only_git_credentials() {
     fs::create_dir(&output_dir).expect("temporary output directory created");
     let output_file = output_dir.join("credentials");
     let mut cmd = Command::cargo_bin("ops-session").expect("binary exists");
+    let (config_dir, config_path) = write_github_config("ops-session-config-test");
 
     cmd.args([
+        "github",
+        "--config-path",
+        config_path.to_str().expect("utf-8 config path"),
         "--api-url",
         &api_url,
         "--git-credentials",
@@ -235,7 +256,6 @@ fn ops_session_can_configure_child_only_git_credentials() {
     ])
     .env("GITHUB_APP_ID", "1")
     .env("GITHUB_APP_INSTALLATION_ID", "42")
-    .env("GITHUB_APP_PRIVATE_KEY", TEST_RSA_PRIVATE_KEY)
     .env_remove("GIT_CONFIG_COUNT")
     .env_remove("GIT_CONFIG_KEY_0")
     .env_remove("GIT_CONFIG_VALUE_0")
@@ -247,6 +267,7 @@ fn ops_session_can_configure_child_only_git_credentials() {
     let request = server.join().expect("server thread completed");
     assert!(request.starts_with("post /app/installations/42/access_tokens "));
     fs::remove_dir_all(output_dir).expect("temporary output directory removed");
+    fs::remove_dir_all(config_dir).expect("config dir removed");
 }
 
 #[cfg(unix)]
@@ -254,16 +275,18 @@ fn ops_session_can_configure_child_only_git_credentials() {
 fn ops_session_exits_with_child_exit_code() {
     let (api_url, server) = one_token_response_server();
     let mut cmd = Command::cargo_bin("ops-session").expect("binary exists");
+    let (config_dir, config_path) = write_github_config("ops-session-config-test");
 
     cmd.args([
+        "github",
+        "--config-path",
+        config_path.to_str().expect("utf-8 config path"),
         "--app-id",
         "1",
         "--installation-id",
         "42",
         "--api-url",
         &api_url,
-        "--private-key",
-        TEST_RSA_PRIVATE_KEY,
         "--",
         "sh",
         "-c",
@@ -274,6 +297,7 @@ fn ops_session_exits_with_child_exit_code() {
 
     let request = server.join().expect("server thread completed");
     assert!(request.starts_with("post /app/installations/42/access_tokens "));
+    fs::remove_dir_all(config_dir).expect("config dir removed");
 }
 
 #[cfg(unix)]
@@ -281,18 +305,20 @@ fn ops_session_exits_with_child_exit_code() {
 fn ops_session_reuses_valid_cached_installation_token() {
     let cache_dir = unique_temp_dir("ops-session-token-cache-test");
     let (api_url, server) = token_cache_response_server();
+    let (config_dir, config_path) = write_github_config("ops-session-config-test");
 
     let mut first = Command::cargo_bin("ops-session").expect("binary exists");
     first
         .args([
+            "github",
+            "--config-path",
+            config_path.to_str().expect("utf-8 config path"),
             "--app-id",
             "1",
             "--installation-id",
             "42",
             "--api-url",
             &api_url,
-            "--private-key",
-            TEST_RSA_PRIVATE_KEY,
             "--",
             "sh",
             "-c",
@@ -305,14 +331,15 @@ fn ops_session_reuses_valid_cached_installation_token() {
     let mut second = Command::cargo_bin("ops-session").expect("binary exists");
     second
         .args([
+            "github",
+            "--config-path",
+            config_path.to_str().expect("utf-8 config path"),
             "--app-id",
             "1",
             "--installation-id",
             "42",
             "--api-url",
             &api_url,
-            "--private-key",
-            "not-a-key",
             "--",
             "sh",
             "-c",
@@ -328,6 +355,7 @@ fn ops_session_reuses_valid_cached_installation_token() {
     assert!(requests[1].starts_with("get /installation/repositories "));
 
     fs::remove_dir_all(cache_dir).expect("temporary cache directory removed");
+    fs::remove_dir_all(config_dir).expect("config dir removed");
 }
 
 #[cfg(unix)]
@@ -335,16 +363,18 @@ fn ops_session_reuses_valid_cached_installation_token() {
 fn ops_session_mints_token_when_cache_directory_is_unavailable() {
     let (api_url, server) = one_token_response_server();
     let mut cmd = Command::cargo_bin("ops-session").expect("binary exists");
+    let (config_dir, config_path) = write_github_config("ops-session-config-test");
 
     cmd.args([
+        "github",
+        "--config-path",
+        config_path.to_str().expect("utf-8 config path"),
         "--app-id",
         "1",
         "--installation-id",
         "42",
         "--api-url",
         &api_url,
-        "--private-key",
-        TEST_RSA_PRIVATE_KEY,
         "--",
         "sh",
         "-c",
@@ -357,6 +387,7 @@ fn ops_session_mints_token_when_cache_directory_is_unavailable() {
 
     let request = server.join().expect("server thread completed");
     assert!(request.starts_with("post /app/installations/42/access_tokens "));
+    fs::remove_dir_all(config_dir).expect("config dir removed");
 }
 
 #[cfg(unix)]
@@ -364,16 +395,18 @@ fn ops_session_mints_token_when_cache_directory_is_unavailable() {
 fn ops_session_exits_with_child_signal_status() {
     let (api_url, server) = one_token_response_server();
     let mut cmd = Command::cargo_bin("ops-session").expect("binary exists");
+    let (config_dir, config_path) = write_github_config("ops-session-config-test");
 
     cmd.args([
+        "github",
+        "--config-path",
+        config_path.to_str().expect("utf-8 config path"),
         "--app-id",
         "1",
         "--installation-id",
         "42",
         "--api-url",
         &api_url,
-        "--private-key",
-        TEST_RSA_PRIVATE_KEY,
         "--",
         "sh",
         "-c",
@@ -384,36 +417,46 @@ fn ops_session_exits_with_child_signal_status() {
 
     let request = server.join().expect("server thread completed");
     assert!(request.starts_with("post /app/installations/42/access_tokens "));
+    fs::remove_dir_all(config_dir).expect("config dir removed");
 }
 
 #[test]
 fn ops_session_requires_command_after_separator() {
     let mut cmd = Command::cargo_bin("ops-session").expect("binary exists");
+    let (config_dir, config_path) = write_github_config("ops-session-config-test");
 
     cmd.args([
+        "github",
+        "--config-path",
+        config_path.to_str().expect("utf-8 config path"),
         "--app-id",
         "1",
         "--repo",
         "OWNER/REPO",
-        "--private-key",
-        TEST_RSA_PRIVATE_KEY,
     ])
     .assert()
     .failure()
     .stderr(predicate::str::contains("<COMMAND>"));
+
+    fs::remove_dir_all(config_dir).expect("config dir removed");
 }
 
 #[test]
 fn ops_session_accepts_command_options_after_separator() {
     let mut cmd = Command::cargo_bin("ops-session").expect("binary exists");
+    let config_dir = unique_temp_dir("ops-session-config-test");
+    fs::create_dir(&config_dir).expect("config dir created");
+    let config_path = config_dir.join("github.toml");
+    fs::write(&config_path, "private_key_path = \"/not/a/key.pem\"\n").expect("config written");
 
     cmd.args([
+        "github",
+        "--config-path",
+        config_path.to_str().expect("utf-8 config path"),
         "--app-id",
         "1",
         "--repo",
         "OWNER/REPO",
-        "--private-key",
-        "not-a-key",
         "--",
         "gh",
         "pr",
@@ -424,9 +467,9 @@ fn ops_session_accepts_command_options_after_separator() {
     ])
     .assert()
     .failure()
-    .stderr(predicate::str::contains(
-        "private key must be an RSA PEM key",
-    ));
+    .stderr(predicate::str::contains("failed to read private key"));
+
+    fs::remove_dir_all(config_dir).expect("config dir removed");
 }
 
 #[test]
@@ -450,7 +493,7 @@ fn creates_github_app_agent_workflow_skill() {
     assert!(skill.contains("name: github-app-agent-workflow"));
     assert!(skill.contains("ops-session"));
     assert!(skill.contains("without printing the token or exporting it"));
-    assert!(skill.contains("primarily for debugging GitHub App authentication behavior"));
+    assert!(skill.contains("only for diagnostics"));
 
     fs::remove_dir_all(skills_dir).expect("temporary skill directory removed");
 }
@@ -515,6 +558,23 @@ fn refuses_to_overwrite_existing_skill_without_force() {
         .stderr(predicate::str::contains("already exists"));
 
     fs::remove_dir_all(skills_dir).expect("temporary skill directory removed");
+}
+
+fn write_github_config(prefix: &str) -> (std::path::PathBuf, std::path::PathBuf) {
+    let config_dir = unique_temp_dir(prefix);
+    fs::create_dir(&config_dir).expect("config dir created");
+    let private_key_path = config_dir.join("private-key.pem");
+    fs::write(&private_key_path, TEST_RSA_PRIVATE_KEY).expect("private key written");
+    let config_path = config_dir.join("github.toml");
+    fs::write(
+        &config_path,
+        format!(
+            "private_key_path = \"{}\"\n",
+            private_key_path.to_string_lossy()
+        ),
+    )
+    .expect("config written");
+    (config_dir, config_path)
 }
 
 fn unique_temp_dir(prefix: &str) -> std::path::PathBuf {

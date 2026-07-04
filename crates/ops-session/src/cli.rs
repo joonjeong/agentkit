@@ -2,7 +2,7 @@ use std::ffi::{OsStr, OsString};
 use std::path::Path;
 
 use anyhow::Result;
-use clap::Parser;
+use clap::{Parser, Subcommand};
 
 use crate::github;
 
@@ -14,32 +14,32 @@ const VERSION: &str = match option_env!("OPS_SESSION_VERSION") {
 #[derive(Debug, Parser)]
 #[command(name = "ops-session")]
 #[command(version = VERSION)]
-#[command(about = "Run a command in a GitHub App-backed operations session")]
+#[command(about = "Run a command in an authenticated operations session")]
 #[command(after_long_help = "Invocation forms:
-  ops-session [OPTIONS] -- COMMAND [ARG]...
-  ops-session app-auth [OPTIONS]
+  ops-session github [OPTIONS] -- COMMAND [ARG]...
+  ops-session github app-auth [OPTIONS]
   ops-session agent-skill --install-path DIR
 
 For now, GitHub App authentication is the only supported session provider.")]
 struct OpsSessionCli {
-    #[command(flatten)]
-    args: github::OpsSessionArgs,
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Debug, Subcommand)]
+enum Command {
+    /// Run a command through a GitHub App installation token.
+    Github(github::GithubSessionArgs),
+    /// Create the GitHub App agent workflow skill.
+    AgentSkill(github::AppAgentWorkflowSkillArgs),
 }
 
 #[derive(Debug, Parser)]
-#[command(name = "ops-session app-auth")]
+#[command(name = "ops-session github app-auth")]
 #[command(version = VERSION)]
 struct AppAuthCli {
     #[command(flatten)]
     args: github::AppAuthArgs,
-}
-
-#[derive(Debug, Parser)]
-#[command(name = "ops-session agent-skill")]
-#[command(version = VERSION)]
-struct AgentSkillCli {
-    #[command(flatten)]
-    args: github::AppAgentWorkflowSkillArgs,
 }
 
 pub fn run<I, T>(args: I) -> Result<()>
@@ -63,19 +63,18 @@ where
     }
 
     match args.get(1).and_then(|arg| arg.to_str()) {
-        Some("app-auth") => {
+        Some("github") if args.get(2).and_then(|arg| arg.to_str()) == Some("app-auth") => {
+            args.remove(2);
             args.remove(1);
             let cli = AppAuthCli::parse_from(args);
             github::app_auth(cli.args)
         }
-        Some("agent-skill") => {
-            args.remove(1);
-            let cli = AgentSkillCli::parse_from(args);
-            github::create_app_agent_workflow_skill(cli.args)
-        }
         _ => {
             let cli = OpsSessionCli::parse_from(args);
-            github::ops_session(cli.args)
+            match cli.command {
+                Command::Github(args) => github::github_session(args),
+                Command::AgentSkill(args) => github::create_app_agent_workflow_skill(args),
+            }
         }
     }
 }

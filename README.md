@@ -1,6 +1,6 @@
-# toolbox
+# ops tools
 
-Personal general-purpose tools packaged as Rust binaries.
+Operational tools packaged as Rust binaries.
 
 ## Shape
 
@@ -26,22 +26,24 @@ token context. For now, GitHub App authentication is the only supported session
 provider.
 
 ```sh
-ops-session \
+ops-session github \
   --app-id "$GITHUB_APP_ID" \
   --repo OWNER/REPO \
-  --private-key-file /path/to/private-key.pem \
   -- git remote update
 ```
+
+GitHub App credential material is read from `/etc/ops-session/github.toml` by
+default. Set `private_key_path` there; do not pass private key paths or private
+key contents through CLI arguments or environment variables.
 
 The child command receives `GH_TOKEN` and `GITHUB_TOKEN`. GitHub App credential
 environment variables are removed from the child environment. Shell syntax such
 as pipes or redirects requires an explicit shell:
 
 ```sh
-ops-session \
+ops-session github \
   --app-id "$GITHUB_APP_ID" \
   --repo OWNER/REPO \
-  --private-key-file /path/to/private-key.pem \
   -- sh -c 'gh issue view 123 | jq .url'
 ```
 
@@ -49,17 +51,16 @@ Git HTTPS remotes need `--git-credentials` so the child process gets a
 temporary Git credential helper:
 
 ```sh
-ops-session \
+ops-session github \
   --app-id "$GITHUB_APP_ID" \
   --repo OWNER/REPO \
   --permission contents=read \
-  --private-key-file /path/to/private-key.pem \
   --git-credentials \
   -- git ls-remote --heads https://github.com/OWNER/REPO.git
 ```
 
-Diagnostic token output is available through `ops-session app-auth`, but normal
-agent workflows should use the default `ops-session ... -- COMMAND` form.
+Diagnostic token output is available through `ops-session github app-auth`, but
+normal agent workflows should use `ops-session github ... -- COMMAND`.
 
 See [crates/ops-session/README.md](crates/ops-session/README.md).
 

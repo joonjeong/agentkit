@@ -58,7 +58,7 @@ target_sha="$(git rev-parse "${target_ref}^{commit}")"
 headver_output="$("${script_dir}/headver" "${headver_args[@]}")"
 release_version="$(awk -F= '$1 == "version" { print $2 }' <<< "${headver_output}")"
 release_tag="$(awk -F= '$1 == "tag" { print $2 }' <<< "${headver_output}")"
-release_name="toolbox ${release_tag}"
+release_name="ops tools ${release_tag}"
 release_notes="Automated HeadVer release ${release_version} for ${target_sha}."
 
 printf '%s\n' "${headver_output}"
