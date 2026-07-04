@@ -122,7 +122,7 @@ sudo /usr/local/sbin/ops-runbook service reload cloudflared
 sudo /usr/local/sbin/ops-runbook service status cloudflared
 sudo /usr/local/sbin/ops-runbook logs hermes --lines 200 # systemd only
 sudo /usr/local/sbin/ops-runbook policy check
-sudo /usr/local/sbin/ops-runbook policy explain service_restart hermes
+sudo /usr/local/sbin/ops-runbook policy explain
 sudo /usr/local/sbin/ops-runbook version
 ```
 
@@ -142,10 +142,10 @@ Validate the policy:
 sudo /usr/local/sbin/ops-runbook policy check
 ```
 
-Explain a decision for the current sudo caller:
+Dump the validated policy and per-caller derived commands:
 
 ```sh
-sudo /usr/local/sbin/ops-runbook policy explain service_restart hermes
+sudo /usr/local/sbin/ops-runbook policy explain
 ```
 
 Audit events are written to:

@@ -22,9 +22,6 @@ pub enum Error {
     #[error("invalid caller: {0}")]
     InvalidCaller(String),
 
-    #[error("invalid action: {0}")]
-    InvalidAction(String),
-
     #[error("invalid bootstrap option: {0}")]
     InvalidBootstrapOption(String),
 

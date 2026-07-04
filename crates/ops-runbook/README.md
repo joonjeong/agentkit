@@ -15,7 +15,7 @@ sudo /usr/local/sbin/ops-runbook service reload cloudflared
 sudo /usr/local/sbin/ops-runbook service status cloudflared
 sudo /usr/local/sbin/ops-runbook logs hermes --lines 200
 sudo /usr/local/sbin/ops-runbook policy check
-sudo /usr/local/sbin/ops-runbook policy explain service_restart hermes
+sudo /usr/local/sbin/ops-runbook policy explain
 ```
 
 The binary never exposes `exec`, `shell`, raw `systemctl`, raw `apt`, or
@@ -45,7 +45,7 @@ writes the default policy, writes sudoers, and writes logrotate config.
 The generated sudoers rule grants only:
 
 ```sudoers
-%ops-agent ALL=(root) NOPASSWD: /usr/local/sbin/ops-runbook service start *, /usr/local/sbin/ops-runbook service stop *, /usr/local/sbin/ops-runbook service restart *, /usr/local/sbin/ops-runbook service reload *, /usr/local/sbin/ops-runbook service status *, /usr/local/sbin/ops-runbook logs *, /usr/local/sbin/ops-runbook policy check, /usr/local/sbin/ops-runbook policy explain *, /usr/local/sbin/ops-runbook version
+%ops-agent ALL=(root) NOPASSWD: /usr/local/sbin/ops-runbook service start *, /usr/local/sbin/ops-runbook service stop *, /usr/local/sbin/ops-runbook service restart *, /usr/local/sbin/ops-runbook service reload *, /usr/local/sbin/ops-runbook service status *, /usr/local/sbin/ops-runbook logs *, /usr/local/sbin/ops-runbook policy check, /usr/local/sbin/ops-runbook policy explain, /usr/local/sbin/ops-runbook version
 ```
 
 Useful bootstrap options:

@@ -22,27 +22,6 @@ impl Action {
             Self::Logs => "logs",
         }
     }
-
-    pub fn source_field(self) -> &'static str {
-        match self {
-            Self::ServiceStart | Self::ServiceStop | Self::ServiceRestart | Self::ServiceReload => {
-                "service_control"
-            }
-            Self::ServiceStatus | Self::Logs => "service_read",
-        }
-    }
-
-    pub fn parse(value: &str) -> Result<Self> {
-        match value {
-            "service_start" => Ok(Self::ServiceStart),
-            "service_stop" => Ok(Self::ServiceStop),
-            "service_restart" => Ok(Self::ServiceRestart),
-            "service_reload" => Ok(Self::ServiceReload),
-            "service_status" => Ok(Self::ServiceStatus),
-            "logs" => Ok(Self::Logs),
-            other => Err(Error::InvalidAction(other.to_owned())),
-        }
-    }
 }
 
 pub fn validate_target(target: &str) -> Result<()> {

@@ -104,7 +104,7 @@ sudo /usr/local/sbin/ops-runbook service reload cloudflared
 sudo /usr/local/sbin/ops-runbook service status cloudflared
 sudo /usr/local/sbin/ops-runbook logs hermes --lines 200
 sudo /usr/local/sbin/ops-runbook policy check
-sudo /usr/local/sbin/ops-runbook policy explain service_restart hermes
+sudo /usr/local/sbin/ops-runbook policy explain
 ```
 
 It reads `/etc/ops-runbook/policy.toml`, determines the real caller from

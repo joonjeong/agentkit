@@ -122,7 +122,7 @@ sudo /usr/local/sbin/ops-runbook service reload cloudflared
 sudo /usr/local/sbin/ops-runbook service status cloudflared
 sudo /usr/local/sbin/ops-runbook logs hermes --lines 200 # systemd only
 sudo /usr/local/sbin/ops-runbook policy check
-sudo /usr/local/sbin/ops-runbook policy explain service_restart hermes
+sudo /usr/local/sbin/ops-runbook policy explain
 sudo /usr/local/sbin/ops-runbook version
 ```
 
@@ -142,10 +142,10 @@ policy를 검증합니다.
 sudo /usr/local/sbin/ops-runbook policy check
 ```
 
-현재 sudo 호출자의 정책 판단을 설명합니다.
+검증된 policy와 caller별 파생 명령을 출력합니다.
 
 ```sh
-sudo /usr/local/sbin/ops-runbook policy explain service_restart hermes
+sudo /usr/local/sbin/ops-runbook policy explain
 ```
 
 감사 로그는 다음 파일에 기록됩니다.

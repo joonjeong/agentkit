@@ -27,24 +27,30 @@ fn policy_check_accepts_sample_policy() {
 }
 
 #[test]
-fn explain_reports_allow_for_current_sudo_user() {
+fn policy_explain_dumps_validated_policy() {
     let temp = temp_dir("ops-runbook-explain");
     let policy = write_policy(&temp, SAMPLE_POLICY);
 
     Command::cargo_bin("ops-runbook")
         .expect("binary exists")
-        .args(["policy", "explain", "service_restart", "hermes"])
+        .args(["policy", "explain"])
         .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
         .env("OPS_RUNBOOK_POLICY_PATH", &policy)
-        .env("SUDO_USER", "hermes")
         .assert()
         .success()
         .stdout(
-            predicate::str::contains("caller: hermes")
-                .and(predicate::str::contains("decision: allow"))
+            predicate::str::contains("version: 1")
+                .and(predicate::str::contains("backend: systemd"))
+                .and(predicate::str::contains("callers:"))
+                .and(predicate::str::contains("  hermes:"))
                 .and(predicate::str::contains(
-                    "source: callers.hermes.service_control",
-                )),
+                    "    service_control: [\"hermes\", \"cloudflared\", \"tailscale\"]",
+                ))
+                .and(predicate::str::contains("service start hermes"))
+                .and(predicate::str::contains("service stop hermes"))
+                .and(predicate::str::contains("service restart hermes"))
+                .and(predicate::str::contains("service status cloudflared"))
+                .and(predicate::str::contains("logs tailscale")),
         );
 
     fs::remove_dir_all(temp).expect("temporary directory removed");
@@ -372,7 +378,7 @@ fn bootstrap_installs_binary_and_writes_configurable_files() {
     assert!(sudoers_contents.contains("Defaults:%custom-ops"));
     assert!(sudoers_contents.contains(&format!("logfile=\"{}\"", sudo_log.display())));
     assert!(sudoers_contents.contains(&format!("{} service restart *", binary.display())));
-    assert!(sudoers_contents.contains(&format!("{} policy explain *", binary.display())));
+    assert!(sudoers_contents.contains(&format!("{} policy explain", binary.display())));
     assert!(!sudoers_contents.contains(" bootstrap"));
 
     let policy_contents = fs::read_to_string(policy).expect("policy written");

@@ -30,7 +30,7 @@ enum Command {
     Service(ServiceCommand),
     /// Show allowlisted service logs.
     Logs(LogsArgs),
-    /// Validate or explain policy decisions.
+    /// Validate or inspect policy.
     Policy(PolicyCommand),
     /// Print the ops-runbook version.
     Version,
@@ -78,8 +78,8 @@ struct PolicyCommand {
 enum PolicySubcommand {
     /// Load and validate the policy file.
     Check,
-    /// Explain the current caller's decision for an action and target.
-    Explain { action: String, target: String },
+    /// Dump the validated policy and derived commands.
+    Explain,
 }
 
 pub fn run<I, T>(args: I) -> Result<i32>
@@ -117,9 +117,7 @@ where
         Command::Logs(args) => execute(Action::Logs, &args.service, Some(args.lines), &policy_path),
         Command::Policy(command) => match command.command {
             PolicySubcommand::Check => check_policy(&policy_path),
-            PolicySubcommand::Explain { action, target } => {
-                explain_policy(&policy_path, &action, &target)
-            }
+            PolicySubcommand::Explain => explain_policy(&policy_path),
         },
         Command::Version => {
             println!("ops-runbook {VERSION}");
@@ -159,34 +157,51 @@ fn check_policy(policy_path: &Path) -> Result<i32> {
     Ok(0)
 }
 
-fn explain_policy(policy_path: &Path, action: &str, target: &str) -> Result<i32> {
-    let action = Action::parse(action)?;
-    validate_target(target)?;
-    let caller = caller_from_sudo()?;
+fn explain_policy(policy_path: &Path) -> Result<i32> {
     let config = load_valid_config(policy_path)?;
+    let mut callers = config.callers.iter().collect::<Vec<_>>();
+    callers.sort_by(|(left, _), (right, _)| left.cmp(right));
 
-    println!("caller: {caller}");
-    println!("action: {}", action.as_str());
-    println!("target: {target}");
+    println!("policy: {}", policy_path.display());
+    println!("version: {}", config.version);
+    println!("backend: {}", config.backend());
+    println!("max_log_lines: {}", config.max_log_lines());
+    println!("callers:");
 
-    let Some(caller_policy) = config.callers.get(&caller) else {
-        println!("decision: deny");
-        println!("reason: caller not listed in policy");
-        return Ok(0);
-    };
-
-    if is_allowed(caller_policy, action, target) {
-        println!("decision: allow");
-        println!("source: callers.{caller}.{}", action.source_field());
-    } else {
-        println!("decision: deny");
+    for (caller, caller_policy) in callers {
+        println!("  {caller}:");
         println!(
-            "reason: target not listed in callers.{caller}.{}",
-            action.source_field()
+            "    service_control: {}",
+            format_string_list(&caller_policy.service_control)
         );
+        println!(
+            "    service_read: {}",
+            format_string_list(&caller_policy.service_read)
+        );
+        println!("    commands:");
+        for service in &caller_policy.service_control {
+            println!("      service start {service}");
+            println!("      service stop {service}");
+            println!("      service restart {service}");
+            println!("      service reload {service}");
+        }
+        for service in &caller_policy.service_read {
+            println!("      service status {service}");
+            if config.backend() == crate::config::Backend::Systemd {
+                println!("      logs {service}");
+            }
+        }
     }
 
     Ok(0)
+}
+
+fn format_string_list(items: &[String]) -> String {
+    let quoted = items
+        .iter()
+        .map(|item| format!("\"{item}\""))
+        .collect::<Vec<_>>();
+    format!("[{}]", quoted.join(", "))
 }
 
 fn execute(
