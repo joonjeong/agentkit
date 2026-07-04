@@ -22,17 +22,23 @@ pub enum Error {
     #[error("invalid caller: {0}")]
     InvalidCaller(String),
 
-    #[error("invalid action: {0}")]
-    InvalidAction(String),
-
     #[error("invalid bootstrap option: {0}")]
     InvalidBootstrapOption(String),
+
+    #[error("invalid policy option: {0}")]
+    InvalidPolicyOption(String),
 
     #[error("bootstrap must be run as root")]
     BootstrapRequiresRoot,
 
     #[error("invalid log line count: {0}")]
     InvalidLineCount(u32),
+
+    #[error("backend {backend} does not support action {action}")]
+    UnsupportedBackendAction {
+        backend: &'static str,
+        action: &'static str,
+    },
 
     #[error("unsupported policy version: {0}")]
     UnsupportedPolicyVersion(u32),

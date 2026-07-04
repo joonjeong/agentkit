@@ -6,7 +6,7 @@ use std::process::Command;
 use clap::Args;
 
 use crate::audit;
-use crate::config::DEFAULT_POLICY_PATH;
+use crate::config::{Backend, DEFAULT_POLICY_PATH};
 use crate::error::{Error, Result};
 use crate::policy::validate_caller;
 
@@ -25,6 +25,10 @@ pub struct BootstrapArgs {
     /// Existing agent user to append to the ops-runbook group. Repeatable.
     #[arg(long = "user")]
     users: Vec<String>,
+
+    /// Service manager backend written to the default policy.
+    #[arg(long, value_enum, default_value_t = Backend::Systemd)]
+    backend: Backend,
 
     /// Source binary to install. Defaults to the currently running executable.
     #[arg(long)]
@@ -101,7 +105,7 @@ pub fn run(args: BootstrapArgs) -> Result<i32> {
 
     write_if_missing_or_forced(
         &args.policy_path,
-        sample_policy().as_bytes(),
+        sample_policy(args.backend).as_bytes(),
         0o644,
         args.force_policy,
     )?;
@@ -358,7 +362,7 @@ Defaults:%{group} env_reset
 Defaults:%{group} log_output
 Defaults:%{group} logfile="{sudo_log}"
 
-%{group} ALL=(root) NOPASSWD: {binary} service restart *, {binary} service reload *, {binary} service status *, {binary} logs *, {binary} policy check, {binary} policy explain *, {binary} version
+%{group} ALL=(root) NOPASSWD: {binary} service start *, {binary} service stop *, {binary} service restart *, {binary} service reload *, {binary} service status *, {binary} logs *, {binary} policy check, {binary} policy check *, {binary} policy explain, {binary} policy explain *, {binary} version
 "#
     )
 }
@@ -379,22 +383,10 @@ fn logrotate_contents(audit_log_path: &Path, sudo_log_path: &Path) -> String {
     )
 }
 
-fn sample_policy() -> &'static str {
-    r#"version = 1
-
-[defaults]
-max_log_lines = 1000
-
-[callers.hermes]
-service_restart = ["nginx", "coredns", "cloudflared"]
-service_reload = ["nginx", "coredns"]
-service_status = ["nginx", "coredns", "cloudflared"]
-logs = ["nginx", "coredns", "cloudflared"]
-
-[callers.openclaw]
-service_restart = ["openclaw", "myriad-bot"]
-service_reload = []
-service_status = ["openclaw", "myriad-bot"]
-logs = ["openclaw", "myriad-bot"]
-"#
+pub(crate) fn sample_policy(backend: Backend) -> String {
+    match backend {
+        Backend::Systemd => include_str!("../configs/policy.systemd.example.toml"),
+        Backend::Openrc => include_str!("../configs/policy.openrc.example.toml"),
+    }
+    .to_owned()
 }

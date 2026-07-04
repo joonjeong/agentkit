@@ -4,12 +4,17 @@
 It lets automation agents run a narrow set of root operations through sudo,
 without granting raw shell, `systemctl`, `apt`, Docker socket, or Ansible access.
 
+Supported service-manager backends:
+
+- `systemd`: service control and logs through `systemctl` and `journalctl`
+- `openrc`: service control through `rc-service`; `logs` is not supported
+
 ## Security Model
 
 The trusted administrator runs:
 
 ```sh
-sudo ./ops-runbook bootstrap --user hermes --user openclaw
+sudo ./ops-runbook bootstrap --user hermes
 ```
 
 `bootstrap` configures the local host:
@@ -44,7 +49,7 @@ target/release/ops-runbook
 Copy or download the binary to the target host, then run:
 
 ```sh
-sudo ./ops-runbook bootstrap --user hermes --user openclaw
+sudo ./ops-runbook bootstrap --user hermes
 ```
 
 Useful options:
@@ -53,6 +58,7 @@ Useful options:
 sudo ./ops-runbook bootstrap \
   --source-binary /path/to/ops-runbook \
   --binary-path /usr/local/sbin/ops-runbook \
+  --backend systemd \
   --group ops-agent \
   --sudoers-path /etc/sudoers.d/ops-agent \
   --policy-path /etc/ops-runbook/policy.toml \
@@ -72,34 +78,53 @@ The default policy format is TOML:
 version = 1
 
 [defaults]
+backend = "systemd"
 max_log_lines = 1000
 
 [callers.hermes]
-service_restart = ["nginx", "coredns", "cloudflared"]
-service_reload = ["nginx", "coredns"]
-service_status = ["nginx", "coredns", "cloudflared"]
-logs = ["nginx", "coredns", "cloudflared"]
+# Allows service start, stop, restart, and reload.
+service_control = ["hermes", "cloudflared", "tailscale"]
+
+# Allows service status and logs.
+service_read = ["hermes", "cloudflared", "tailscale"]
 ```
 
 The caller is read from `SUDO_USER`. For example, when `hermes` runs:
 
 ```sh
-sudo /usr/local/sbin/ops-runbook service restart nginx
+sudo /usr/local/sbin/ops-runbook service restart hermes
 ```
 
-`ops-runbook` checks `callers.hermes.service_restart` for `nginx`.
+`ops-runbook` checks `callers.hermes.service_control` for `hermes`.
+
+For Alpine/OpenRC hosts, set:
+
+```toml
+[defaults]
+backend = "openrc"
+max_log_lines = 1000
+```
+
+With `backend = "openrc"`, `service start`, `service stop`, `service restart`,
+`service reload`, and `service status` call `rc-service`. `logs` returns an
+explicit unsupported backend error because OpenRC does not define a standard
+per-service journald equivalent.
 
 ## Usage
 
 Allowed operational commands:
 
 ```sh
-sudo /usr/local/sbin/ops-runbook service restart nginx
-sudo /usr/local/sbin/ops-runbook service reload coredns
+sudo /usr/local/sbin/ops-runbook service restart hermes
+sudo /usr/local/sbin/ops-runbook service start cloudflared
+sudo /usr/local/sbin/ops-runbook service stop tailscale
+sudo /usr/local/sbin/ops-runbook service reload cloudflared
 sudo /usr/local/sbin/ops-runbook service status cloudflared
-sudo /usr/local/sbin/ops-runbook logs nginx --lines 200
+sudo /usr/local/sbin/ops-runbook logs hermes --lines 200 # systemd only
 sudo /usr/local/sbin/ops-runbook policy check
-sudo /usr/local/sbin/ops-runbook policy explain service_restart nginx
+sudo /usr/local/sbin/ops-runbook policy explain
+sudo /usr/local/sbin/ops-runbook policy explain --policy-path ./policy.toml
+ops-runbook policy template --backend openrc --output ./policy.toml
 sudo /usr/local/sbin/ops-runbook version
 ```
 
@@ -117,13 +142,30 @@ Validate the policy:
 
 ```sh
 sudo /usr/local/sbin/ops-runbook policy check
+sudo /usr/local/sbin/ops-runbook policy check --policy-path ./policy.toml
 ```
 
-Explain a decision for the current sudo caller:
+Dump the validated policy and per-caller derived commands:
 
 ```sh
-sudo /usr/local/sbin/ops-runbook policy explain service_restart nginx
+sudo /usr/local/sbin/ops-runbook policy explain
+OPS_RUNBOOK_POLICY_PATH=./policy.toml ops-runbook policy explain
 ```
+
+The default policy path is `/etc/ops-runbook/policy.toml`. Use
+`--policy-path` with `policy check` or `policy explain`, or set
+`OPS_RUNBOOK_POLICY_PATH`, to inspect another policy file.
+
+Generate a policy template with:
+
+```sh
+ops-runbook policy template --backend systemd
+ops-runbook policy template --backend openrc --output ./policy.toml
+ops-runbook policy template --backend openrc --output ./policy.toml --force
+```
+
+`policy template` is an administrator convenience command and is not included in
+the generated sudoers rule.
 
 Audit events are written to:
 

@@ -4,12 +4,17 @@
 자동화 에이전트가 sudo를 통해 제한된 root 작업만 실행하게 하며, raw shell,
 `systemctl`, `apt`, Docker socket, Ansible 접근 권한은 주지 않습니다.
 
+지원하는 서비스 관리자 backend:
+
+- `systemd`: `systemctl`과 `journalctl`로 서비스 제어 및 로그 조회
+- `openrc`: `rc-service`로 서비스 제어. `logs`는 지원하지 않음
+
 ## 보안 모델
 
 신뢰할 수 있는 관리자가 다음 명령을 실행합니다.
 
 ```sh
-sudo ./ops-runbook bootstrap --user hermes --user openclaw
+sudo ./ops-runbook bootstrap --user hermes
 ```
 
 `bootstrap`은 대상 호스트를 구성합니다.
@@ -44,7 +49,7 @@ target/release/ops-runbook
 바이너리를 대상 호스트에 복사하거나 다운로드한 뒤 실행합니다.
 
 ```sh
-sudo ./ops-runbook bootstrap --user hermes --user openclaw
+sudo ./ops-runbook bootstrap --user hermes
 ```
 
 주요 옵션:
@@ -53,6 +58,7 @@ sudo ./ops-runbook bootstrap --user hermes --user openclaw
 sudo ./ops-runbook bootstrap \
   --source-binary /path/to/ops-runbook \
   --binary-path /usr/local/sbin/ops-runbook \
+  --backend systemd \
   --group ops-agent \
   --sudoers-path /etc/sudoers.d/ops-agent \
   --policy-path /etc/ops-runbook/policy.toml \
@@ -72,34 +78,53 @@ sudo ./ops-runbook bootstrap \
 version = 1
 
 [defaults]
+backend = "systemd"
 max_log_lines = 1000
 
 [callers.hermes]
-service_restart = ["nginx", "coredns", "cloudflared"]
-service_reload = ["nginx", "coredns"]
-service_status = ["nginx", "coredns", "cloudflared"]
-logs = ["nginx", "coredns", "cloudflared"]
+# service start, stop, restart, reload 허용
+service_control = ["hermes", "cloudflared", "tailscale"]
+
+# service status와 logs 허용
+service_read = ["hermes", "cloudflared", "tailscale"]
 ```
 
 호출자는 `SUDO_USER`에서 읽습니다. 예를 들어 `hermes`가 다음을 실행하면:
 
 ```sh
-sudo /usr/local/sbin/ops-runbook service restart nginx
+sudo /usr/local/sbin/ops-runbook service restart hermes
 ```
 
-`ops-runbook`은 `callers.hermes.service_restart`에 `nginx`가 있는지 확인합니다.
+`ops-runbook`은 `callers.hermes.service_control`에 `hermes`가 있는지 확인합니다.
+
+Alpine/OpenRC 호스트에서는 다음처럼 설정합니다.
+
+```toml
+[defaults]
+backend = "openrc"
+max_log_lines = 1000
+```
+
+`backend = "openrc"`에서는 `service start`, `service stop`,
+`service restart`, `service reload`, `service status`가 `rc-service`를
+호출합니다. OpenRC에는 journald에 대응하는 표준 서비스별 로그 조회 방식이
+없으므로 `logs`는 명시적인 unsupported backend 오류를 반환합니다.
 
 ## 사용법
 
 허용되는 운영 명령:
 
 ```sh
-sudo /usr/local/sbin/ops-runbook service restart nginx
-sudo /usr/local/sbin/ops-runbook service reload coredns
+sudo /usr/local/sbin/ops-runbook service restart hermes
+sudo /usr/local/sbin/ops-runbook service start cloudflared
+sudo /usr/local/sbin/ops-runbook service stop tailscale
+sudo /usr/local/sbin/ops-runbook service reload cloudflared
 sudo /usr/local/sbin/ops-runbook service status cloudflared
-sudo /usr/local/sbin/ops-runbook logs nginx --lines 200
+sudo /usr/local/sbin/ops-runbook logs hermes --lines 200 # systemd only
 sudo /usr/local/sbin/ops-runbook policy check
-sudo /usr/local/sbin/ops-runbook policy explain service_restart nginx
+sudo /usr/local/sbin/ops-runbook policy explain
+sudo /usr/local/sbin/ops-runbook policy explain --policy-path ./policy.toml
+ops-runbook policy template --backend openrc --output ./policy.toml
 sudo /usr/local/sbin/ops-runbook version
 ```
 
@@ -117,13 +142,30 @@ policy를 검증합니다.
 
 ```sh
 sudo /usr/local/sbin/ops-runbook policy check
+sudo /usr/local/sbin/ops-runbook policy check --policy-path ./policy.toml
 ```
 
-현재 sudo 호출자의 정책 판단을 설명합니다.
+검증된 policy와 caller별 파생 명령을 출력합니다.
 
 ```sh
-sudo /usr/local/sbin/ops-runbook policy explain service_restart nginx
+sudo /usr/local/sbin/ops-runbook policy explain
+OPS_RUNBOOK_POLICY_PATH=./policy.toml ops-runbook policy explain
 ```
+
+기본 policy 경로는 `/etc/ops-runbook/policy.toml`입니다. 다른 파일을
+확인하려면 `policy check`와 `policy explain`에서 `--policy-path`를
+지정하거나 `OPS_RUNBOOK_POLICY_PATH` 환경변수를 사용할 수 있습니다.
+
+설정 파일 템플릿은 다음처럼 생성합니다.
+
+```sh
+ops-runbook policy template --backend systemd
+ops-runbook policy template --backend openrc --output ./policy.toml
+ops-runbook policy template --backend openrc --output ./policy.toml --force
+```
+
+`policy template`은 관리자 편의 명령이며, 생성되는 sudoers 규칙에는
+포함되지 않습니다.
 
 감사 로그는 다음 파일에 기록됩니다.
 

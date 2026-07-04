@@ -97,18 +97,27 @@ Hermes or OpenClaw to perform a narrow set of root operations through sudo:
 - [설치 및 사용법 (한국어)](docs/ops-runbook-install-usage.ko.md)
 
 ```sh
-sudo /usr/local/sbin/ops-runbook service restart nginx
-sudo /usr/local/sbin/ops-runbook service reload coredns
+sudo /usr/local/sbin/ops-runbook service restart hermes
+sudo /usr/local/sbin/ops-runbook service start cloudflared
+sudo /usr/local/sbin/ops-runbook service stop tailscale
+sudo /usr/local/sbin/ops-runbook service reload cloudflared
 sudo /usr/local/sbin/ops-runbook service status cloudflared
-sudo /usr/local/sbin/ops-runbook logs nginx --lines 200
+sudo /usr/local/sbin/ops-runbook logs hermes --lines 200
 sudo /usr/local/sbin/ops-runbook policy check
-sudo /usr/local/sbin/ops-runbook policy explain service_restart nginx
+sudo /usr/local/sbin/ops-runbook policy explain
+sudo /usr/local/sbin/ops-runbook policy explain --policy-path ./policy.toml
+ops-runbook policy template --backend openrc --output ./policy.toml
 ```
 
-It reads `/etc/ops-runbook/policy.toml`, determines the real caller from
+It reads `/etc/ops-runbook/policy.toml` by default, or
+`OPS_RUNBOOK_POLICY_PATH` when set. `policy check` and `policy explain` also
+accept `--policy-path`. `policy template` prints or writes an example policy
+file for `systemd` or `openrc`. It determines the real caller from
 `SUDO_USER`, rejects direct root execution, validates service targets, writes an
 audit log to `/var/log/ops-runbook/audit.log`, and then runs fixed
-`systemctl`/`journalctl` command paths without a shell.
+service-manager command paths without a shell. The default backend is
+`systemd`; Alpine/OpenRC service control can be enabled with `backend =
+"openrc"` in the policy defaults.
 
 Build it with:
 
@@ -120,7 +129,7 @@ An admin can bootstrap a host directly from a downloaded or locally copied
 binary:
 
 ```sh
-sudo ./ops-runbook bootstrap --user hermes --user openclaw
+sudo ./ops-runbook bootstrap --user hermes
 ```
 
 `bootstrap` installs the current binary to `--binary-path`, creates the group,

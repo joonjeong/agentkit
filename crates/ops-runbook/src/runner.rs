@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::process::Command;
 
+use crate::config::Backend;
 use crate::error::{Error, Result};
 
 fn command_path(env_name: &str, default_path: &str) -> PathBuf {
@@ -13,7 +14,24 @@ fn command_path(env_name: &str, default_path: &str) -> PathBuf {
     PathBuf::from(default_path)
 }
 
-pub fn systemctl(action: &str, service: &str) -> Result<i32> {
+pub fn service(backend: Backend, action: &str, service: &str) -> Result<i32> {
+    match backend {
+        Backend::Systemd => systemctl(action, service),
+        Backend::Openrc => rc_service(action, service),
+    }
+}
+
+pub fn logs(backend: Backend, service: &str, lines: u32) -> Result<i32> {
+    match backend {
+        Backend::Systemd => journalctl(service, lines),
+        Backend::Openrc => Err(Error::UnsupportedBackendAction {
+            backend: backend.as_str(),
+            action: "logs",
+        }),
+    }
+}
+
+fn systemctl(action: &str, service: &str) -> Result<i32> {
     let unit = format!("{service}.service");
     let status = Command::new(command_path("OPS_RUNBOOK_SYSTEMCTL_PATH", "/bin/systemctl"))
         .arg("--no-pager")
@@ -25,7 +43,7 @@ pub fn systemctl(action: &str, service: &str) -> Result<i32> {
     Ok(status.code().unwrap_or(1))
 }
 
-pub fn journalctl(service: &str, lines: u32) -> Result<i32> {
+fn journalctl(service: &str, lines: u32) -> Result<i32> {
     let unit = format!("{service}.service");
     let status = Command::new(command_path(
         "OPS_RUNBOOK_JOURNALCTL_PATH",
@@ -36,6 +54,19 @@ pub fn journalctl(service: &str, lines: u32) -> Result<i32> {
     .arg(unit)
     .arg("-n")
     .arg(lines.to_string())
+    .status()
+    .map_err(Error::CommandStart)?;
+
+    Ok(status.code().unwrap_or(1))
+}
+
+fn rc_service(action: &str, service: &str) -> Result<i32> {
+    let status = Command::new(command_path(
+        "OPS_RUNBOOK_RC_SERVICE_PATH",
+        "/sbin/rc-service",
+    ))
+    .arg(service)
+    .arg(action)
     .status()
     .map_err(Error::CommandStart)?;
 
