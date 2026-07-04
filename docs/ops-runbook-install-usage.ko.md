@@ -4,6 +4,11 @@
 자동화 에이전트가 sudo를 통해 제한된 root 작업만 실행하게 하며, raw shell,
 `systemctl`, `apt`, Docker socket, Ansible 접근 권한은 주지 않습니다.
 
+지원하는 서비스 관리자 backend:
+
+- `systemd`: `systemctl`과 `journalctl`로 서비스 제어 및 로그 조회
+- `openrc`: `rc-service`로 서비스 제어. `logs`는 지원하지 않음
+
 ## 보안 모델
 
 신뢰할 수 있는 관리자가 다음 명령을 실행합니다.
@@ -53,6 +58,7 @@ sudo ./ops-runbook bootstrap --user hermes --user openclaw
 sudo ./ops-runbook bootstrap \
   --source-binary /path/to/ops-runbook \
   --binary-path /usr/local/sbin/ops-runbook \
+  --backend systemd \
   --group ops-agent \
   --sudoers-path /etc/sudoers.d/ops-agent \
   --policy-path /etc/ops-runbook/policy.toml \
@@ -72,6 +78,7 @@ sudo ./ops-runbook bootstrap \
 version = 1
 
 [defaults]
+backend = "systemd"
 max_log_lines = 1000
 
 [callers.hermes]
@@ -89,6 +96,19 @@ sudo /usr/local/sbin/ops-runbook service restart nginx
 
 `ops-runbook`은 `callers.hermes.service_restart`에 `nginx`가 있는지 확인합니다.
 
+Alpine/OpenRC 호스트에서는 다음처럼 설정합니다.
+
+```toml
+[defaults]
+backend = "openrc"
+max_log_lines = 1000
+```
+
+`backend = "openrc"`에서는 `service restart`, `service reload`,
+`service status`가 `rc-service`를 호출합니다. OpenRC에는 journald에 대응하는
+표준 서비스별 로그 조회 방식이 없으므로 `logs`는 명시적인 unsupported backend
+오류를 반환합니다.
+
 ## 사용법
 
 허용되는 운영 명령:
@@ -97,7 +117,7 @@ sudo /usr/local/sbin/ops-runbook service restart nginx
 sudo /usr/local/sbin/ops-runbook service restart nginx
 sudo /usr/local/sbin/ops-runbook service reload coredns
 sudo /usr/local/sbin/ops-runbook service status cloudflared
-sudo /usr/local/sbin/ops-runbook logs nginx --lines 200
+sudo /usr/local/sbin/ops-runbook logs nginx --lines 200 # systemd only
 sudo /usr/local/sbin/ops-runbook policy check
 sudo /usr/local/sbin/ops-runbook policy explain service_restart nginx
 sudo /usr/local/sbin/ops-runbook version

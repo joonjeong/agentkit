@@ -4,6 +4,11 @@
 It lets automation agents run a narrow set of root operations through sudo,
 without granting raw shell, `systemctl`, `apt`, Docker socket, or Ansible access.
 
+Supported service-manager backends:
+
+- `systemd`: service control and logs through `systemctl` and `journalctl`
+- `openrc`: service control through `rc-service`; `logs` is not supported
+
 ## Security Model
 
 The trusted administrator runs:
@@ -53,6 +58,7 @@ Useful options:
 sudo ./ops-runbook bootstrap \
   --source-binary /path/to/ops-runbook \
   --binary-path /usr/local/sbin/ops-runbook \
+  --backend systemd \
   --group ops-agent \
   --sudoers-path /etc/sudoers.d/ops-agent \
   --policy-path /etc/ops-runbook/policy.toml \
@@ -72,6 +78,7 @@ The default policy format is TOML:
 version = 1
 
 [defaults]
+backend = "systemd"
 max_log_lines = 1000
 
 [callers.hermes]
@@ -89,6 +96,19 @@ sudo /usr/local/sbin/ops-runbook service restart nginx
 
 `ops-runbook` checks `callers.hermes.service_restart` for `nginx`.
 
+For Alpine/OpenRC hosts, set:
+
+```toml
+[defaults]
+backend = "openrc"
+max_log_lines = 1000
+```
+
+With `backend = "openrc"`, `service restart`, `service reload`, and
+`service status` call `rc-service`. `logs` returns an explicit unsupported
+backend error because OpenRC does not define a standard per-service journald
+equivalent.
+
 ## Usage
 
 Allowed operational commands:
@@ -97,7 +117,7 @@ Allowed operational commands:
 sudo /usr/local/sbin/ops-runbook service restart nginx
 sudo /usr/local/sbin/ops-runbook service reload coredns
 sudo /usr/local/sbin/ops-runbook service status cloudflared
-sudo /usr/local/sbin/ops-runbook logs nginx --lines 200
+sudo /usr/local/sbin/ops-runbook logs nginx --lines 200 # systemd only
 sudo /usr/local/sbin/ops-runbook policy check
 sudo /usr/local/sbin/ops-runbook policy explain service_restart nginx
 sudo /usr/local/sbin/ops-runbook version

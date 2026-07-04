@@ -34,6 +34,12 @@ pub enum Error {
     #[error("invalid log line count: {0}")]
     InvalidLineCount(u32),
 
+    #[error("backend {backend} does not support action {action}")]
+    UnsupportedBackendAction {
+        backend: &'static str,
+        action: &'static str,
+    },
+
     #[error("unsupported policy version: {0}")]
     UnsupportedPolicyVersion(u32),
 

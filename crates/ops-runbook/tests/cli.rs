@@ -85,6 +85,61 @@ fn service_status_runs_fixed_systemctl_without_shell() {
 }
 
 #[test]
+fn openrc_service_status_runs_rc_service_without_shell() {
+    let temp = temp_dir("ops-runbook-openrc-status");
+    let policy = write_policy(&temp, OPENRC_POLICY);
+    let audit = temp.join("audit.log");
+    let recorder = write_recorder(&temp, "rc-service-recorder");
+    let record = temp.join("rc-service.args");
+
+    Command::cargo_bin("ops-runbook")
+        .expect("binary exists")
+        .args(["service", "status", "nginx"])
+        .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
+        .env("OPS_RUNBOOK_POLICY_PATH", &policy)
+        .env("OPS_RUNBOOK_AUDIT_LOG", &audit)
+        .env("OPS_RUNBOOK_RC_SERVICE_PATH", &recorder)
+        .env("OPS_RUNBOOK_RECORD_PATH", &record)
+        .env("SUDO_USER", "hermes")
+        .assert()
+        .success();
+
+    assert_eq!(
+        fs::read_to_string(record).expect("recorded args"),
+        "nginx\nstatus\n"
+    );
+    let audit_log = fs::read_to_string(audit).expect("audit log");
+    assert!(audit_log.contains("caller=hermes action=service_status target=nginx result=allow"));
+
+    fs::remove_dir_all(temp).expect("temporary directory removed");
+}
+
+#[test]
+fn openrc_logs_are_explicitly_unsupported() {
+    let temp = temp_dir("ops-runbook-openrc-logs");
+    let policy = write_policy(&temp, OPENRC_POLICY);
+    let audit = temp.join("audit.log");
+
+    Command::cargo_bin("ops-runbook")
+        .expect("binary exists")
+        .args(["logs", "nginx", "--lines", "200"])
+        .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
+        .env("OPS_RUNBOOK_POLICY_PATH", &policy)
+        .env("OPS_RUNBOOK_AUDIT_LOG", &audit)
+        .env("SUDO_USER", "hermes")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "backend openrc does not support action logs",
+        ));
+
+    let audit_log = fs::read_to_string(audit).expect("audit log");
+    assert!(audit_log.contains("result=deny reason=unsupported_backend_action"));
+
+    fs::remove_dir_all(temp).expect("temporary directory removed");
+}
+
+#[test]
 fn policy_check_rejects_unknown_policy_fields() {
     let temp = temp_dir("ops-runbook-unknown-policy-field");
     let policy = write_policy(
@@ -238,6 +293,7 @@ fn bootstrap_installs_binary_and_writes_configurable_files() {
     assert!(!sudoers_contents.contains(" bootstrap"));
 
     let policy_contents = fs::read_to_string(policy).expect("policy written");
+    assert!(policy_contents.contains("backend = \"systemd\""));
     assert!(policy_contents.contains("[callers.hermes]"));
 
     let logrotate_contents = fs::read_to_string(logrotate).expect("logrotate written");
@@ -262,6 +318,52 @@ fn bootstrap_rejects_relative_sudoers_paths() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("--sudoers-path must be absolute"));
+}
+
+#[test]
+fn bootstrap_can_write_openrc_default_policy() {
+    let temp = temp_dir("ops-runbook-bootstrap-openrc");
+    let source_binary = temp.join("source/ops-runbook");
+    let binary = temp.join("bin/ops-runbook");
+    let sudoers = temp.join("sudoers/ops-agent");
+    let policy = temp.join("etc/policy.toml");
+    let audit_log = temp.join("logs/audit.log");
+    let sudo_log = temp.join("logs/sudo.log");
+    let logrotate = temp.join("logrotate/ops-runbook");
+    fs::create_dir(source_binary.parent().expect("source parent")).expect("source parent created");
+    fs::write(&source_binary, b"fake ops-runbook binary").expect("source binary written");
+
+    Command::cargo_bin("ops-runbook")
+        .expect("binary exists")
+        .args([
+            "bootstrap",
+            "--skip-system-accounts",
+            "--skip-visudo",
+            "--backend",
+            "openrc",
+            "--source-binary",
+            source_binary.to_str().expect("utf-8 path"),
+            "--binary-path",
+            binary.to_str().expect("utf-8 path"),
+            "--sudoers-path",
+            sudoers.to_str().expect("utf-8 path"),
+            "--policy-path",
+            policy.to_str().expect("utf-8 path"),
+            "--audit-log-path",
+            audit_log.to_str().expect("utf-8 path"),
+            "--sudo-log-path",
+            sudo_log.to_str().expect("utf-8 path"),
+            "--logrotate-path",
+            logrotate.to_str().expect("utf-8 path"),
+        ])
+        .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
+        .assert()
+        .success();
+
+    let policy_contents = fs::read_to_string(policy).expect("policy written");
+    assert!(policy_contents.contains("backend = \"openrc\""));
+
+    fs::remove_dir_all(temp).expect("temporary directory removed");
 }
 
 fn temp_dir(prefix: &str) -> PathBuf {
@@ -314,6 +416,7 @@ const SAMPLE_POLICY: &str = r#"
 version = 1
 
 [defaults]
+backend = "systemd"
 max_log_lines = 1000
 
 [callers.hermes]
@@ -327,4 +430,18 @@ service_restart = ["openclaw", "myriad-bot"]
 service_reload = []
 service_status = ["openclaw", "myriad-bot"]
 logs = ["openclaw", "myriad-bot"]
+"#;
+
+const OPENRC_POLICY: &str = r#"
+version = 1
+
+[defaults]
+backend = "openrc"
+max_log_lines = 1000
+
+[callers.hermes]
+service_restart = ["nginx", "coredns", "cloudflared"]
+service_reload = ["nginx", "coredns"]
+service_status = ["nginx", "coredns", "cloudflared"]
+logs = ["nginx", "coredns", "cloudflared"]
 "#;

@@ -6,7 +6,7 @@ use std::process::Command;
 use clap::Args;
 
 use crate::audit;
-use crate::config::DEFAULT_POLICY_PATH;
+use crate::config::{Backend, DEFAULT_POLICY_PATH};
 use crate::error::{Error, Result};
 use crate::policy::validate_caller;
 
@@ -25,6 +25,10 @@ pub struct BootstrapArgs {
     /// Existing agent user to append to the ops-runbook group. Repeatable.
     #[arg(long = "user")]
     users: Vec<String>,
+
+    /// Service manager backend written to the default policy.
+    #[arg(long, value_enum, default_value_t = Backend::Systemd)]
+    backend: Backend,
 
     /// Source binary to install. Defaults to the currently running executable.
     #[arg(long)]
@@ -101,7 +105,7 @@ pub fn run(args: BootstrapArgs) -> Result<i32> {
 
     write_if_missing_or_forced(
         &args.policy_path,
-        sample_policy().as_bytes(),
+        sample_policy(args.backend).as_bytes(),
         0o644,
         args.force_policy,
     )?;
@@ -379,10 +383,12 @@ fn logrotate_contents(audit_log_path: &Path, sudo_log_path: &Path) -> String {
     )
 }
 
-fn sample_policy() -> &'static str {
-    r#"version = 1
+fn sample_policy(backend: Backend) -> String {
+    format!(
+        r#"version = 1
 
 [defaults]
+backend = "{}"
 max_log_lines = 1000
 
 [callers.hermes]
@@ -396,5 +402,7 @@ service_restart = ["openclaw", "myriad-bot"]
 service_reload = []
 service_status = ["openclaw", "myriad-bot"]
 logs = ["openclaw", "myriad-bot"]
-"#
+"#,
+        backend.as_str()
+    )
 }

@@ -1,7 +1,9 @@
 use std::collections::HashMap;
+use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use clap::ValueEnum;
 use serde::Deserialize;
 
 use crate::error::{Error, Result};
@@ -22,7 +24,30 @@ pub struct Config {
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Defaults {
+    pub backend: Option<Backend>,
     pub max_log_lines: Option<u32>,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Eq, PartialEq, ValueEnum)]
+#[serde(rename_all = "lowercase")]
+pub enum Backend {
+    Systemd,
+    Openrc,
+}
+
+impl Backend {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Systemd => "systemd",
+            Self::Openrc => "openrc",
+        }
+    }
+}
+
+impl fmt::Display for Backend {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -75,6 +100,10 @@ impl Config {
 
     pub fn max_log_lines(&self) -> u32 {
         self.defaults.max_log_lines.unwrap_or(1000)
+    }
+
+    pub fn backend(&self) -> Backend {
+        self.defaults.backend.unwrap_or(Backend::Systemd)
     }
 }
 

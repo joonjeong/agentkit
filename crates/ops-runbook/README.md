@@ -20,7 +20,9 @@ The binary never exposes `exec`, `shell`, raw `systemctl`, raw `apt`, or
 `ansible-playbook` commands. It reads the original caller from `SUDO_USER`,
 rejects direct root execution, validates the target name, checks the caller's
 allowlist, writes `/var/log/ops-runbook/audit.log`, and then executes a fixed
-command path without going through a shell.
+service-manager command path without going through a shell. The default backend
+is `systemd`; Alpine/OpenRC service control can be enabled with `backend =
+"openrc"` in the policy defaults.
 
 Build:
 
@@ -48,6 +50,8 @@ Useful bootstrap options:
 
 - `--binary-path /usr/local/sbin/ops-runbook`
 - `--source-binary /path/to/ops-runbook`
+- `--backend systemd`
+- `--backend openrc`
 - `--sudoers-path /etc/sudoers.d/ops-agent`
 - `--policy-path /etc/ops-runbook/policy.toml`
 - `--audit-log-path /var/log/ops-runbook/audit.log`

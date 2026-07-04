@@ -26,9 +26,9 @@ struct Cli {
 enum Command {
     /// Bootstrap local installation, policy, sudoers, logrotate, and group access.
     Bootstrap(BootstrapArgs),
-    /// Manage allowlisted systemd services.
+    /// Manage allowlisted services.
     Service(ServiceCommand),
-    /// Show allowlisted service logs from journald.
+    /// Show allowlisted service logs.
     Logs(LogsArgs),
     /// Validate or explain policy decisions.
     Policy(PolicyCommand),
@@ -227,13 +227,28 @@ fn execute(
         return Err(Error::InvalidLineCount(lines));
     }
 
+    if action == Action::Logs && config.backend() == crate::config::Backend::Openrc {
+        audit::write(
+            &audit_path,
+            &caller,
+            action.as_str(),
+            target,
+            "deny",
+            Some("unsupported_backend_action"),
+        )?;
+        return Err(Error::UnsupportedBackendAction {
+            backend: config.backend().as_str(),
+            action: action.as_str(),
+        });
+    }
+
     audit::write(&audit_path, &caller, action.as_str(), target, "allow", None)?;
 
     let exit_code = match action {
-        Action::ServiceRestart => runner::systemctl("restart", target),
-        Action::ServiceReload => runner::systemctl("reload", target),
-        Action::ServiceStatus => runner::systemctl("status", target),
-        Action::Logs => runner::journalctl(target, lines),
+        Action::ServiceRestart => runner::service(config.backend(), "restart", target),
+        Action::ServiceReload => runner::service(config.backend(), "reload", target),
+        Action::ServiceStatus => runner::service(config.backend(), "status", target),
+        Action::Logs => runner::logs(config.backend(), target, lines),
     }?;
 
     let outcome = format!("exit_code={exit_code}");

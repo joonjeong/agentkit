@@ -108,7 +108,9 @@ sudo /usr/local/sbin/ops-runbook policy explain service_restart nginx
 It reads `/etc/ops-runbook/policy.toml`, determines the real caller from
 `SUDO_USER`, rejects direct root execution, validates service targets, writes an
 audit log to `/var/log/ops-runbook/audit.log`, and then runs fixed
-`systemctl`/`journalctl` command paths without a shell.
+service-manager command paths without a shell. The default backend is
+`systemd`; Alpine/OpenRC service control can be enabled with `backend =
+"openrc"` in the policy defaults.
 
 Build it with:
 
