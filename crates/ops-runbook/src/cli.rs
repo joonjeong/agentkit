@@ -190,7 +190,7 @@ fn check_policy(policy_path: &Path) -> Result<i32> {
 fn explain_policy(policy_path: &Path) -> Result<i32> {
     let config = load_valid_config(policy_path)?;
     let mut callers = config.callers.iter().collect::<Vec<_>>();
-    callers.sort_by(|(left, _), (right, _)| left.cmp(right));
+    callers.sort_by_key(|(caller, _)| *caller);
 
     println!("policy: {}", policy_path.display());
     println!("version: {}", config.version);
