@@ -412,36 +412,5 @@ fn write_recorder(dir: &Path, name: &str) -> PathBuf {
     path
 }
 
-const SAMPLE_POLICY: &str = r#"
-version = 1
-
-[defaults]
-backend = "systemd"
-max_log_lines = 1000
-
-[callers.hermes]
-service_restart = ["nginx", "coredns", "cloudflared"]
-service_reload = ["nginx", "coredns"]
-service_status = ["nginx", "coredns", "cloudflared"]
-logs = ["nginx", "coredns", "cloudflared"]
-
-[callers.openclaw]
-service_restart = ["openclaw", "myriad-bot"]
-service_reload = []
-service_status = ["openclaw", "myriad-bot"]
-logs = ["openclaw", "myriad-bot"]
-"#;
-
-const OPENRC_POLICY: &str = r#"
-version = 1
-
-[defaults]
-backend = "openrc"
-max_log_lines = 1000
-
-[callers.hermes]
-service_restart = ["nginx", "coredns", "cloudflared"]
-service_reload = ["nginx", "coredns"]
-service_status = ["nginx", "coredns", "cloudflared"]
-logs = ["nginx", "coredns", "cloudflared"]
-"#;
+const SAMPLE_POLICY: &str = include_str!("../configs/policy.systemd.toml");
+const OPENRC_POLICY: &str = include_str!("../configs/policy.openrc.toml");

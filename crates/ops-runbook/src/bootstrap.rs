@@ -384,25 +384,9 @@ fn logrotate_contents(audit_log_path: &Path, sudo_log_path: &Path) -> String {
 }
 
 fn sample_policy(backend: Backend) -> String {
-    format!(
-        r#"version = 1
-
-[defaults]
-backend = "{}"
-max_log_lines = 1000
-
-[callers.hermes]
-service_restart = ["nginx", "coredns", "cloudflared"]
-service_reload = ["nginx", "coredns"]
-service_status = ["nginx", "coredns", "cloudflared"]
-logs = ["nginx", "coredns", "cloudflared"]
-
-[callers.openclaw]
-service_restart = ["openclaw", "myriad-bot"]
-service_reload = []
-service_status = ["openclaw", "myriad-bot"]
-logs = ["openclaw", "myriad-bot"]
-"#,
-        backend.as_str()
-    )
+    match backend {
+        Backend::Systemd => include_str!("../configs/policy.systemd.toml"),
+        Backend::Openrc => include_str!("../configs/policy.openrc.toml"),
+    }
+    .to_owned()
 }
