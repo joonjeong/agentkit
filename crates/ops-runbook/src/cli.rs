@@ -44,6 +44,10 @@ struct ServiceCommand {
 
 #[derive(Debug, Subcommand)]
 enum ServiceSubcommand {
+    /// Start an allowlisted service.
+    Start(TargetArgs),
+    /// Stop an allowlisted service.
+    Stop(TargetArgs),
     /// Restart an allowlisted service.
     Restart(TargetArgs),
     /// Reload an allowlisted service.
@@ -94,6 +98,12 @@ where
     match cli.command {
         Command::Bootstrap(args) => bootstrap::run(args),
         Command::Service(command) => match command.command {
+            ServiceSubcommand::Start(args) => {
+                execute(Action::ServiceStart, &args.service, None, &policy_path)
+            }
+            ServiceSubcommand::Stop(args) => {
+                execute(Action::ServiceStop, &args.service, None, &policy_path)
+            }
             ServiceSubcommand::Restart(args) => {
                 execute(Action::ServiceRestart, &args.service, None, &policy_path)
             }
@@ -245,6 +255,8 @@ fn execute(
     audit::write(&audit_path, &caller, action.as_str(), target, "allow", None)?;
 
     let exit_code = match action {
+        Action::ServiceStart => runner::service(config.backend(), "start", target),
+        Action::ServiceStop => runner::service(config.backend(), "stop", target),
         Action::ServiceRestart => runner::service(config.backend(), "restart", target),
         Action::ServiceReload => runner::service(config.backend(), "reload", target),
         Action::ServiceStatus => runner::service(config.backend(), "status", target),

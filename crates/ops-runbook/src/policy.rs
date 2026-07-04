@@ -3,6 +3,8 @@ use crate::error::{Error, Result};
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum Action {
+    ServiceStart,
+    ServiceStop,
     ServiceRestart,
     ServiceReload,
     ServiceStatus,
@@ -12,6 +14,8 @@ pub enum Action {
 impl Action {
     pub fn as_str(self) -> &'static str {
         match self {
+            Self::ServiceStart => "service_start",
+            Self::ServiceStop => "service_stop",
             Self::ServiceRestart => "service_restart",
             Self::ServiceReload => "service_reload",
             Self::ServiceStatus => "service_status",
@@ -25,6 +29,8 @@ impl Action {
 
     pub fn parse(value: &str) -> Result<Self> {
         match value {
+            "service_start" => Ok(Self::ServiceStart),
+            "service_stop" => Ok(Self::ServiceStop),
             "service_restart" => Ok(Self::ServiceRestart),
             "service_reload" => Ok(Self::ServiceReload),
             "service_status" => Ok(Self::ServiceStatus),
@@ -60,6 +66,8 @@ pub fn validate_caller(caller: &str) -> Result<()> {
 
 pub fn allowed_targets(policy: &CallerPolicy, action: Action) -> &[String] {
     match action {
+        Action::ServiceStart => &policy.service_start,
+        Action::ServiceStop => &policy.service_stop,
         Action::ServiceRestart => &policy.service_restart,
         Action::ServiceReload => &policy.service_reload,
         Action::ServiceStatus => &policy.service_status,

@@ -82,6 +82,8 @@ backend = "systemd"
 max_log_lines = 1000
 
 [callers.hermes]
+service_start = ["nginx", "coredns", "cloudflared"]
+service_stop = ["nginx", "coredns", "cloudflared"]
 service_restart = ["nginx", "coredns", "cloudflared"]
 service_reload = ["nginx", "coredns"]
 service_status = ["nginx", "coredns", "cloudflared"]
@@ -104,10 +106,10 @@ backend = "openrc"
 max_log_lines = 1000
 ```
 
-`backend = "openrc"`에서는 `service restart`, `service reload`,
-`service status`가 `rc-service`를 호출합니다. OpenRC에는 journald에 대응하는
-표준 서비스별 로그 조회 방식이 없으므로 `logs`는 명시적인 unsupported backend
-오류를 반환합니다.
+`backend = "openrc"`에서는 `service start`, `service stop`,
+`service restart`, `service reload`, `service status`가 `rc-service`를
+호출합니다. OpenRC에는 journald에 대응하는 표준 서비스별 로그 조회 방식이
+없으므로 `logs`는 명시적인 unsupported backend 오류를 반환합니다.
 
 ## 사용법
 
@@ -115,6 +117,8 @@ max_log_lines = 1000
 
 ```sh
 sudo /usr/local/sbin/ops-runbook service restart nginx
+sudo /usr/local/sbin/ops-runbook service start nginx
+sudo /usr/local/sbin/ops-runbook service stop nginx
 sudo /usr/local/sbin/ops-runbook service reload coredns
 sudo /usr/local/sbin/ops-runbook service status cloudflared
 sudo /usr/local/sbin/ops-runbook logs nginx --lines 200 # systemd only

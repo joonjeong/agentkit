@@ -54,6 +54,10 @@ impl fmt::Display for Backend {
 #[serde(deny_unknown_fields)]
 pub struct CallerPolicy {
     #[serde(default)]
+    pub service_start: Vec<String>,
+    #[serde(default)]
+    pub service_stop: Vec<String>,
+    #[serde(default)]
     pub service_restart: Vec<String>,
     #[serde(default)]
     pub service_reload: Vec<String>,
@@ -84,6 +88,8 @@ impl Config {
         for (caller, policy) in &self.callers {
             validate_caller(caller)?;
             for action in [
+                Action::ServiceStart,
+                Action::ServiceStop,
                 Action::ServiceRestart,
                 Action::ServiceReload,
                 Action::ServiceStatus,

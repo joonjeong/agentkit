@@ -9,6 +9,8 @@ Agents in the `ops-agent` Unix group can run only the operations listed in
 
 ```sh
 sudo /usr/local/sbin/ops-runbook service restart nginx
+sudo /usr/local/sbin/ops-runbook service start nginx
+sudo /usr/local/sbin/ops-runbook service stop nginx
 sudo /usr/local/sbin/ops-runbook service reload coredns
 sudo /usr/local/sbin/ops-runbook service status cloudflared
 sudo /usr/local/sbin/ops-runbook logs nginx --lines 200
@@ -43,7 +45,7 @@ writes the default policy, writes sudoers, and writes logrotate config.
 The generated sudoers rule grants only:
 
 ```sudoers
-%ops-agent ALL=(root) NOPASSWD: /usr/local/sbin/ops-runbook service restart *, /usr/local/sbin/ops-runbook service reload *, /usr/local/sbin/ops-runbook service status *, /usr/local/sbin/ops-runbook logs *, /usr/local/sbin/ops-runbook policy check, /usr/local/sbin/ops-runbook policy explain *, /usr/local/sbin/ops-runbook version
+%ops-agent ALL=(root) NOPASSWD: /usr/local/sbin/ops-runbook service start *, /usr/local/sbin/ops-runbook service stop *, /usr/local/sbin/ops-runbook service restart *, /usr/local/sbin/ops-runbook service reload *, /usr/local/sbin/ops-runbook service status *, /usr/local/sbin/ops-runbook logs *, /usr/local/sbin/ops-runbook policy check, /usr/local/sbin/ops-runbook policy explain *, /usr/local/sbin/ops-runbook version
 ```
 
 Useful bootstrap options:

@@ -5,12 +5,16 @@ backend = "systemd"
 max_log_lines = 1000
 
 [callers.hermes]
+service_start = ["nginx", "coredns", "cloudflared"]
+service_stop = ["nginx", "coredns", "cloudflared"]
 service_restart = ["nginx", "coredns", "cloudflared"]
 service_reload = ["nginx", "coredns"]
 service_status = ["nginx", "coredns", "cloudflared"]
 logs = ["nginx", "coredns", "cloudflared"]
 
 [callers.openclaw]
+service_start = ["openclaw", "myriad-bot"]
+service_stop = ["openclaw", "myriad-bot"]
 service_restart = ["openclaw", "myriad-bot"]
 service_reload = []
 service_status = ["openclaw", "myriad-bot"]

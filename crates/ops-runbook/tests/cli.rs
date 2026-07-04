@@ -85,6 +85,62 @@ fn service_status_runs_fixed_systemctl_without_shell() {
 }
 
 #[test]
+fn service_start_runs_fixed_systemctl_without_shell() {
+    let temp = temp_dir("ops-runbook-start");
+    let policy = write_policy(&temp, SAMPLE_POLICY);
+    let audit = temp.join("audit.log");
+    let recorder = write_recorder(&temp, "systemctl-recorder");
+    let record = temp.join("systemctl.args");
+
+    Command::cargo_bin("ops-runbook")
+        .expect("binary exists")
+        .args(["service", "start", "nginx"])
+        .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
+        .env("OPS_RUNBOOK_POLICY_PATH", &policy)
+        .env("OPS_RUNBOOK_AUDIT_LOG", &audit)
+        .env("OPS_RUNBOOK_SYSTEMCTL_PATH", &recorder)
+        .env("OPS_RUNBOOK_RECORD_PATH", &record)
+        .env("SUDO_USER", "hermes")
+        .assert()
+        .success();
+
+    assert_eq!(
+        fs::read_to_string(record).expect("recorded args"),
+        "--no-pager\nstart\nnginx.service\n"
+    );
+
+    fs::remove_dir_all(temp).expect("temporary directory removed");
+}
+
+#[test]
+fn service_stop_runs_fixed_systemctl_without_shell() {
+    let temp = temp_dir("ops-runbook-stop");
+    let policy = write_policy(&temp, SAMPLE_POLICY);
+    let audit = temp.join("audit.log");
+    let recorder = write_recorder(&temp, "systemctl-recorder");
+    let record = temp.join("systemctl.args");
+
+    Command::cargo_bin("ops-runbook")
+        .expect("binary exists")
+        .args(["service", "stop", "nginx"])
+        .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
+        .env("OPS_RUNBOOK_POLICY_PATH", &policy)
+        .env("OPS_RUNBOOK_AUDIT_LOG", &audit)
+        .env("OPS_RUNBOOK_SYSTEMCTL_PATH", &recorder)
+        .env("OPS_RUNBOOK_RECORD_PATH", &record)
+        .env("SUDO_USER", "hermes")
+        .assert()
+        .success();
+
+    assert_eq!(
+        fs::read_to_string(record).expect("recorded args"),
+        "--no-pager\nstop\nnginx.service\n"
+    );
+
+    fs::remove_dir_all(temp).expect("temporary directory removed");
+}
+
+#[test]
 fn openrc_service_status_runs_rc_service_without_shell() {
     let temp = temp_dir("ops-runbook-openrc-status");
     let policy = write_policy(&temp, OPENRC_POLICY);
@@ -110,6 +166,34 @@ fn openrc_service_status_runs_rc_service_without_shell() {
     );
     let audit_log = fs::read_to_string(audit).expect("audit log");
     assert!(audit_log.contains("caller=hermes action=service_status target=nginx result=allow"));
+
+    fs::remove_dir_all(temp).expect("temporary directory removed");
+}
+
+#[test]
+fn openrc_service_start_runs_rc_service_without_shell() {
+    let temp = temp_dir("ops-runbook-openrc-start");
+    let policy = write_policy(&temp, OPENRC_POLICY);
+    let audit = temp.join("audit.log");
+    let recorder = write_recorder(&temp, "rc-service-recorder");
+    let record = temp.join("rc-service.args");
+
+    Command::cargo_bin("ops-runbook")
+        .expect("binary exists")
+        .args(["service", "start", "nginx"])
+        .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
+        .env("OPS_RUNBOOK_POLICY_PATH", &policy)
+        .env("OPS_RUNBOOK_AUDIT_LOG", &audit)
+        .env("OPS_RUNBOOK_RC_SERVICE_PATH", &recorder)
+        .env("OPS_RUNBOOK_RECORD_PATH", &record)
+        .env("SUDO_USER", "hermes")
+        .assert()
+        .success();
+
+    assert_eq!(
+        fs::read_to_string(record).expect("recorded args"),
+        "nginx\nstart\n"
+    );
 
     fs::remove_dir_all(temp).expect("temporary directory removed");
 }

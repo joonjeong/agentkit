@@ -98,6 +98,8 @@ Hermes or OpenClaw to perform a narrow set of root operations through sudo:
 
 ```sh
 sudo /usr/local/sbin/ops-runbook service restart nginx
+sudo /usr/local/sbin/ops-runbook service start nginx
+sudo /usr/local/sbin/ops-runbook service stop nginx
 sudo /usr/local/sbin/ops-runbook service reload coredns
 sudo /usr/local/sbin/ops-runbook service status cloudflared
 sudo /usr/local/sbin/ops-runbook logs nginx --lines 200
