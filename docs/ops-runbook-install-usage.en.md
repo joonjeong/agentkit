@@ -123,6 +123,8 @@ sudo /usr/local/sbin/ops-runbook service status cloudflared
 sudo /usr/local/sbin/ops-runbook logs hermes --lines 200 # systemd only
 sudo /usr/local/sbin/ops-runbook policy check
 sudo /usr/local/sbin/ops-runbook policy explain
+sudo /usr/local/sbin/ops-runbook policy explain --policy-path ./policy.toml
+ops-runbook policy template --backend openrc --output ./policy.toml
 sudo /usr/local/sbin/ops-runbook version
 ```
 
@@ -140,13 +142,30 @@ Validate the policy:
 
 ```sh
 sudo /usr/local/sbin/ops-runbook policy check
+sudo /usr/local/sbin/ops-runbook policy check --policy-path ./policy.toml
 ```
 
 Dump the validated policy and per-caller derived commands:
 
 ```sh
 sudo /usr/local/sbin/ops-runbook policy explain
+OPS_RUNBOOK_POLICY_PATH=./policy.toml ops-runbook policy explain
 ```
+
+The default policy path is `/etc/ops-runbook/policy.toml`. Use
+`--policy-path` with `policy check` or `policy explain`, or set
+`OPS_RUNBOOK_POLICY_PATH`, to inspect another policy file.
+
+Generate a policy template with:
+
+```sh
+ops-runbook policy template --backend systemd
+ops-runbook policy template --backend openrc --output ./policy.toml
+ops-runbook policy template --backend openrc --output ./policy.toml --force
+```
+
+`policy template` is an administrator convenience command and is not included in
+the generated sudoers rule.
 
 Audit events are written to:
 

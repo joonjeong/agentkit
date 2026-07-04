@@ -106,10 +106,8 @@ impl Config {
 }
 
 pub fn configured_policy_path() -> PathBuf {
-    if cfg!(debug_assertions) && std::env::var_os("OPS_RUNBOOK_TEST_OVERRIDES").is_some() {
-        if let Some(path) = std::env::var_os("OPS_RUNBOOK_POLICY_PATH") {
-            return PathBuf::from(path);
-        }
+    if let Some(path) = std::env::var_os("OPS_RUNBOOK_POLICY_PATH") {
+        return PathBuf::from(path);
     }
 
     PathBuf::from(DEFAULT_POLICY_PATH)

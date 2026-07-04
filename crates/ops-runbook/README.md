@@ -16,6 +16,8 @@ sudo /usr/local/sbin/ops-runbook service status cloudflared
 sudo /usr/local/sbin/ops-runbook logs hermes --lines 200
 sudo /usr/local/sbin/ops-runbook policy check
 sudo /usr/local/sbin/ops-runbook policy explain
+sudo /usr/local/sbin/ops-runbook policy explain --policy-path ./policy.toml
+ops-runbook policy template --backend openrc --output ./policy.toml
 ```
 
 The binary never exposes `exec`, `shell`, raw `systemctl`, raw `apt`, or
@@ -38,6 +40,10 @@ Bootstrap a host directly from a downloaded or locally copied binary:
 sudo ./ops-runbook bootstrap --user hermes
 ```
 
+`policy template` prints an example policy by default and can write one with
+`--output`; it is intended for administrators and is not included in the
+generated sudoers rule.
+
 `bootstrap` installs the current executable to `/usr/local/sbin/ops-runbook`,
 creates the `ops-agent` group, adds existing `--user` accounts to the group,
 writes the default policy, writes sudoers, and writes logrotate config.
@@ -45,7 +51,7 @@ writes the default policy, writes sudoers, and writes logrotate config.
 The generated sudoers rule grants only:
 
 ```sudoers
-%ops-agent ALL=(root) NOPASSWD: /usr/local/sbin/ops-runbook service start *, /usr/local/sbin/ops-runbook service stop *, /usr/local/sbin/ops-runbook service restart *, /usr/local/sbin/ops-runbook service reload *, /usr/local/sbin/ops-runbook service status *, /usr/local/sbin/ops-runbook logs *, /usr/local/sbin/ops-runbook policy check, /usr/local/sbin/ops-runbook policy explain, /usr/local/sbin/ops-runbook version
+%ops-agent ALL=(root) NOPASSWD: /usr/local/sbin/ops-runbook service start *, /usr/local/sbin/ops-runbook service stop *, /usr/local/sbin/ops-runbook service restart *, /usr/local/sbin/ops-runbook service reload *, /usr/local/sbin/ops-runbook service status *, /usr/local/sbin/ops-runbook logs *, /usr/local/sbin/ops-runbook policy check, /usr/local/sbin/ops-runbook policy check *, /usr/local/sbin/ops-runbook policy explain, /usr/local/sbin/ops-runbook policy explain *, /usr/local/sbin/ops-runbook version
 ```
 
 Useful bootstrap options:

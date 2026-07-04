@@ -362,7 +362,7 @@ Defaults:%{group} env_reset
 Defaults:%{group} log_output
 Defaults:%{group} logfile="{sudo_log}"
 
-%{group} ALL=(root) NOPASSWD: {binary} service start *, {binary} service stop *, {binary} service restart *, {binary} service reload *, {binary} service status *, {binary} logs *, {binary} policy check, {binary} policy explain, {binary} version
+%{group} ALL=(root) NOPASSWD: {binary} service start *, {binary} service stop *, {binary} service restart *, {binary} service reload *, {binary} service status *, {binary} logs *, {binary} policy check, {binary} policy check *, {binary} policy explain, {binary} policy explain *, {binary} version
 "#
     )
 }
@@ -383,7 +383,7 @@ fn logrotate_contents(audit_log_path: &Path, sudo_log_path: &Path) -> String {
     )
 }
 
-fn sample_policy(backend: Backend) -> String {
+pub(crate) fn sample_policy(backend: Backend) -> String {
     match backend {
         Backend::Systemd => include_str!("../configs/policy.systemd.example.toml"),
         Backend::Openrc => include_str!("../configs/policy.openrc.example.toml"),

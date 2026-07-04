@@ -25,6 +25,9 @@ pub enum Error {
     #[error("invalid bootstrap option: {0}")]
     InvalidBootstrapOption(String),
 
+    #[error("invalid policy option: {0}")]
+    InvalidPolicyOption(String),
+
     #[error("bootstrap must be run as root")]
     BootstrapRequiresRoot,
 

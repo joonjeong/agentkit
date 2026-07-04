@@ -27,6 +27,31 @@ fn policy_check_accepts_sample_policy() {
 }
 
 #[test]
+fn policy_check_accepts_explicit_policy_path() {
+    let temp = temp_dir("ops-runbook-policy-check-path");
+    let policy = write_policy(&temp, SAMPLE_POLICY);
+    let invalid_policy = temp.join("invalid-policy.toml");
+    fs::write(&invalid_policy, "not toml").expect("invalid policy written");
+
+    Command::cargo_bin("ops-runbook")
+        .expect("binary exists")
+        .args([
+            "policy",
+            "check",
+            "--policy-path",
+            policy.to_str().expect("utf-8 path"),
+        ])
+        .env("OPS_RUNBOOK_POLICY_PATH", &invalid_policy)
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("policy OK:").and(predicate::str::contains("callers: hermes")),
+        );
+
+    fs::remove_dir_all(temp).expect("temporary directory removed");
+}
+
+#[test]
 fn policy_explain_dumps_validated_policy() {
     let temp = temp_dir("ops-runbook-explain");
     let policy = write_policy(&temp, SAMPLE_POLICY);
@@ -52,6 +77,73 @@ fn policy_explain_dumps_validated_policy() {
                 .and(predicate::str::contains("service status cloudflared"))
                 .and(predicate::str::contains("logs tailscale")),
         );
+
+    fs::remove_dir_all(temp).expect("temporary directory removed");
+}
+
+#[test]
+fn policy_template_prints_backend_template() {
+    Command::cargo_bin("ops-runbook")
+        .expect("binary exists")
+        .args(["policy", "template", "--backend", "openrc"])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("backend = \"openrc\"")
+                .and(predicate::str::contains("[callers.hermes]"))
+                .and(predicate::str::contains("service_control")),
+        );
+}
+
+#[test]
+fn policy_template_writes_output_without_overwriting_by_default() {
+    let temp = temp_dir("ops-runbook-policy-template");
+    let output = temp.join("policy.toml");
+
+    Command::cargo_bin("ops-runbook")
+        .expect("binary exists")
+        .args([
+            "policy",
+            "template",
+            "--output",
+            output.to_str().expect("utf-8 path"),
+        ])
+        .assert()
+        .success();
+
+    let contents = fs::read_to_string(&output).expect("template written");
+    assert!(contents.contains("backend = \"systemd\""));
+
+    Command::cargo_bin("ops-runbook")
+        .expect("binary exists")
+        .args([
+            "policy",
+            "template",
+            "--backend",
+            "openrc",
+            "--output",
+            output.to_str().expect("utf-8 path"),
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("output already exists"));
+
+    Command::cargo_bin("ops-runbook")
+        .expect("binary exists")
+        .args([
+            "policy",
+            "template",
+            "--backend",
+            "openrc",
+            "--output",
+            output.to_str().expect("utf-8 path"),
+            "--force",
+        ])
+        .assert()
+        .success();
+
+    let contents = fs::read_to_string(output).expect("template overwritten");
+    assert!(contents.contains("backend = \"openrc\""));
 
     fs::remove_dir_all(temp).expect("temporary directory removed");
 }
@@ -378,7 +470,9 @@ fn bootstrap_installs_binary_and_writes_configurable_files() {
     assert!(sudoers_contents.contains("Defaults:%custom-ops"));
     assert!(sudoers_contents.contains(&format!("logfile=\"{}\"", sudo_log.display())));
     assert!(sudoers_contents.contains(&format!("{} service restart *", binary.display())));
+    assert!(sudoers_contents.contains(&format!("{} policy check *", binary.display())));
     assert!(sudoers_contents.contains(&format!("{} policy explain", binary.display())));
+    assert!(sudoers_contents.contains(&format!("{} policy explain *", binary.display())));
     assert!(!sudoers_contents.contains(" bootstrap"));
 
     let policy_contents = fs::read_to_string(policy).expect("policy written");

@@ -105,9 +105,14 @@ sudo /usr/local/sbin/ops-runbook service status cloudflared
 sudo /usr/local/sbin/ops-runbook logs hermes --lines 200
 sudo /usr/local/sbin/ops-runbook policy check
 sudo /usr/local/sbin/ops-runbook policy explain
+sudo /usr/local/sbin/ops-runbook policy explain --policy-path ./policy.toml
+ops-runbook policy template --backend openrc --output ./policy.toml
 ```
 
-It reads `/etc/ops-runbook/policy.toml`, determines the real caller from
+It reads `/etc/ops-runbook/policy.toml` by default, or
+`OPS_RUNBOOK_POLICY_PATH` when set. `policy check` and `policy explain` also
+accept `--policy-path`. `policy template` prints or writes an example policy
+file for `systemd` or `openrc`. It determines the real caller from
 `SUDO_USER`, rejects direct root execution, validates service targets, writes an
 audit log to `/var/log/ops-runbook/audit.log`, and then runs fixed
 service-manager command paths without a shell. The default backend is

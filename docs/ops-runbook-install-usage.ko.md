@@ -123,6 +123,8 @@ sudo /usr/local/sbin/ops-runbook service status cloudflared
 sudo /usr/local/sbin/ops-runbook logs hermes --lines 200 # systemd only
 sudo /usr/local/sbin/ops-runbook policy check
 sudo /usr/local/sbin/ops-runbook policy explain
+sudo /usr/local/sbin/ops-runbook policy explain --policy-path ./policy.toml
+ops-runbook policy template --backend openrc --output ./policy.toml
 sudo /usr/local/sbin/ops-runbook version
 ```
 
@@ -140,13 +142,30 @@ policy를 검증합니다.
 
 ```sh
 sudo /usr/local/sbin/ops-runbook policy check
+sudo /usr/local/sbin/ops-runbook policy check --policy-path ./policy.toml
 ```
 
 검증된 policy와 caller별 파생 명령을 출력합니다.
 
 ```sh
 sudo /usr/local/sbin/ops-runbook policy explain
+OPS_RUNBOOK_POLICY_PATH=./policy.toml ops-runbook policy explain
 ```
+
+기본 policy 경로는 `/etc/ops-runbook/policy.toml`입니다. 다른 파일을
+확인하려면 `policy check`와 `policy explain`에서 `--policy-path`를
+지정하거나 `OPS_RUNBOOK_POLICY_PATH` 환경변수를 사용할 수 있습니다.
+
+설정 파일 템플릿은 다음처럼 생성합니다.
+
+```sh
+ops-runbook policy template --backend systemd
+ops-runbook policy template --backend openrc --output ./policy.toml
+ops-runbook policy template --backend openrc --output ./policy.toml --force
+```
+
+`policy template`은 관리자 편의 명령이며, 생성되는 sudoers 규칙에는
+포함되지 않습니다.
 
 감사 로그는 다음 파일에 기록됩니다.
 

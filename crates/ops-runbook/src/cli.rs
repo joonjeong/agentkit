@@ -1,11 +1,12 @@
 use std::ffi::OsString;
-use std::path::Path;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use clap::{Args, Parser, Subcommand};
 
 use crate::audit;
 use crate::bootstrap::{self, BootstrapArgs};
-use crate::config::{configured_policy_path, Config};
+use crate::config::{configured_policy_path, Backend, Config};
 use crate::error::{Error, Result};
 use crate::policy::{is_allowed, validate_target, Action};
 use crate::runner;
@@ -77,9 +78,33 @@ struct PolicyCommand {
 #[derive(Debug, Subcommand)]
 enum PolicySubcommand {
     /// Load and validate the policy file.
-    Check,
+    Check(PolicyArgs),
     /// Dump the validated policy and derived commands.
-    Explain,
+    Explain(PolicyArgs),
+    /// Generate an example policy template.
+    Template(PolicyTemplateArgs),
+}
+
+#[derive(Debug, Args)]
+struct PolicyArgs {
+    /// Policy file to read.
+    #[arg(long, env = "OPS_RUNBOOK_POLICY_PATH")]
+    policy_path: Option<PathBuf>,
+}
+
+#[derive(Debug, Args)]
+struct PolicyTemplateArgs {
+    /// Service manager backend for the generated template.
+    #[arg(long, value_enum, default_value_t = Backend::Systemd)]
+    backend: Backend,
+
+    /// Write the template to a file instead of stdout.
+    #[arg(long)]
+    output: Option<PathBuf>,
+
+    /// Replace an existing output file.
+    #[arg(long)]
+    force: bool,
 }
 
 pub fn run<I, T>(args: I) -> Result<i32>
@@ -116,8 +141,13 @@ where
         },
         Command::Logs(args) => execute(Action::Logs, &args.service, Some(args.lines), &policy_path),
         Command::Policy(command) => match command.command {
-            PolicySubcommand::Check => check_policy(&policy_path),
-            PolicySubcommand::Explain => explain_policy(&policy_path),
+            PolicySubcommand::Check(args) => {
+                check_policy(args.policy_path.as_deref().unwrap_or(&policy_path))
+            }
+            PolicySubcommand::Explain(args) => {
+                explain_policy(args.policy_path.as_deref().unwrap_or(&policy_path))
+            }
+            PolicySubcommand::Template(args) => template_policy(args),
         },
         Command::Version => {
             println!("ops-runbook {VERSION}");
@@ -202,6 +232,27 @@ fn format_string_list(items: &[String]) -> String {
         .map(|item| format!("\"{item}\""))
         .collect::<Vec<_>>();
     format!("[{}]", quoted.join(", "))
+}
+
+fn template_policy(args: PolicyTemplateArgs) -> Result<i32> {
+    let template = bootstrap::sample_policy(args.backend);
+    let Some(output) = args.output else {
+        print!("{template}");
+        return Ok(0);
+    };
+
+    if output.exists() && !args.force {
+        return Err(Error::InvalidPolicyOption(format!(
+            "output already exists: {}",
+            output.display()
+        )));
+    }
+
+    fs::write(&output, template).map_err(|source| Error::Io {
+        path: output,
+        source,
+    })?;
+    Ok(0)
 }
 
 fn execute(
