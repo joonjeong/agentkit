@@ -15,8 +15,8 @@ on:
         description: "Build command driver, either cargo or cargo-zigbuild."
         required: true
         type: string
-      toolbox_version:
-        description: "TOOLBOX_VERSION value embedded by the build script."
+      ops_session_version:
+        description: "OPS_SESSION_VERSION value embedded by the build."
         required: true
         type: string
       ref:
@@ -68,12 +68,12 @@ jobs:
       - name: Build
         env:
           BUILD_TOOL: ${{ inputs.build_tool }}
-          TOOLBOX_VERSION: ${{ inputs.toolbox_version }}
+          OPS_SESSION_VERSION: ${{ inputs.ops_session_version }}
         run: |
           if [[ "${BUILD_TOOL}" == "cargo-zigbuild" ]]; then
-            cargo zigbuild --release --target ${{ inputs.target }} --bin toolbox
+            cargo zigbuild --release --target ${{ inputs.target }} --bin ops-session
           else
-            cargo build --release --target ${{ inputs.target }} --bin toolbox
+            cargo build --release --target ${{ inputs.target }} --bin ops-session
           fi
 
       - name: Package artifact
@@ -83,7 +83,7 @@ jobs:
           ARTIFACT_NAME: ${{ inputs.artifact_name }}
         run: |
           mkdir -p dist
-          cp "target/${{ inputs.target }}/release/toolbox" "dist/${ARTIFACT_NAME}"
+          cp "target/${{ inputs.target }}/release/ops-session" "dist/${ARTIFACT_NAME}"
           chmod +x "dist/${ARTIFACT_NAME}"
           shasum -a 256 "dist/${ARTIFACT_NAME}" > "dist/${ARTIFACT_NAME}.sha256"
 
