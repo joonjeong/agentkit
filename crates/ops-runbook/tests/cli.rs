@@ -20,8 +20,7 @@ fn policy_check_accepts_sample_policy() {
         .assert()
         .success()
         .stdout(
-            predicate::str::contains("policy OK:")
-                .and(predicate::str::contains("callers: hermes, openclaw")),
+            predicate::str::contains("policy OK:").and(predicate::str::contains("callers: hermes")),
         );
 
     fs::remove_dir_all(temp).expect("temporary directory removed");
@@ -34,7 +33,7 @@ fn explain_reports_allow_for_current_sudo_user() {
 
     Command::cargo_bin("ops-runbook")
         .expect("binary exists")
-        .args(["policy", "explain", "service_restart", "nginx"])
+        .args(["policy", "explain", "service_restart", "hermes"])
         .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
         .env("OPS_RUNBOOK_POLICY_PATH", &policy)
         .env("SUDO_USER", "hermes")
@@ -44,7 +43,7 @@ fn explain_reports_allow_for_current_sudo_user() {
             predicate::str::contains("caller: hermes")
                 .and(predicate::str::contains("decision: allow"))
                 .and(predicate::str::contains(
-                    "source: callers.hermes.service_restart",
+                    "source: callers.hermes.service_control",
                 )),
         );
 
@@ -61,7 +60,7 @@ fn service_status_runs_fixed_systemctl_without_shell() {
 
     Command::cargo_bin("ops-runbook")
         .expect("binary exists")
-        .args(["service", "status", "nginx"])
+        .args(["service", "status", "hermes"])
         .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
         .env("OPS_RUNBOOK_POLICY_PATH", &policy)
         .env("OPS_RUNBOOK_AUDIT_LOG", &audit)
@@ -73,12 +72,12 @@ fn service_status_runs_fixed_systemctl_without_shell() {
 
     assert_eq!(
         fs::read_to_string(record).expect("recorded args"),
-        "--no-pager\nstatus\nnginx.service\n"
+        "--no-pager\nstatus\nhermes.service\n"
     );
     let audit_log = fs::read_to_string(audit).expect("audit log");
-    assert!(audit_log.contains("caller=hermes action=service_status target=nginx result=allow"));
+    assert!(audit_log.contains("caller=hermes action=service_status target=hermes result=allow"));
     assert!(audit_log.contains(
-        "caller=hermes action=service_status target=nginx result=executed reason=exit_code=0"
+        "caller=hermes action=service_status target=hermes result=executed reason=exit_code=0"
     ));
 
     fs::remove_dir_all(temp).expect("temporary directory removed");
@@ -94,7 +93,7 @@ fn service_start_runs_fixed_systemctl_without_shell() {
 
     Command::cargo_bin("ops-runbook")
         .expect("binary exists")
-        .args(["service", "start", "nginx"])
+        .args(["service", "start", "hermes"])
         .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
         .env("OPS_RUNBOOK_POLICY_PATH", &policy)
         .env("OPS_RUNBOOK_AUDIT_LOG", &audit)
@@ -106,7 +105,7 @@ fn service_start_runs_fixed_systemctl_without_shell() {
 
     assert_eq!(
         fs::read_to_string(record).expect("recorded args"),
-        "--no-pager\nstart\nnginx.service\n"
+        "--no-pager\nstart\nhermes.service\n"
     );
 
     fs::remove_dir_all(temp).expect("temporary directory removed");
@@ -122,7 +121,7 @@ fn service_stop_runs_fixed_systemctl_without_shell() {
 
     Command::cargo_bin("ops-runbook")
         .expect("binary exists")
-        .args(["service", "stop", "nginx"])
+        .args(["service", "stop", "hermes"])
         .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
         .env("OPS_RUNBOOK_POLICY_PATH", &policy)
         .env("OPS_RUNBOOK_AUDIT_LOG", &audit)
@@ -134,7 +133,7 @@ fn service_stop_runs_fixed_systemctl_without_shell() {
 
     assert_eq!(
         fs::read_to_string(record).expect("recorded args"),
-        "--no-pager\nstop\nnginx.service\n"
+        "--no-pager\nstop\nhermes.service\n"
     );
 
     fs::remove_dir_all(temp).expect("temporary directory removed");
@@ -150,7 +149,7 @@ fn openrc_service_status_runs_rc_service_without_shell() {
 
     Command::cargo_bin("ops-runbook")
         .expect("binary exists")
-        .args(["service", "status", "nginx"])
+        .args(["service", "status", "hermes"])
         .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
         .env("OPS_RUNBOOK_POLICY_PATH", &policy)
         .env("OPS_RUNBOOK_AUDIT_LOG", &audit)
@@ -162,10 +161,10 @@ fn openrc_service_status_runs_rc_service_without_shell() {
 
     assert_eq!(
         fs::read_to_string(record).expect("recorded args"),
-        "nginx\nstatus\n"
+        "hermes\nstatus\n"
     );
     let audit_log = fs::read_to_string(audit).expect("audit log");
-    assert!(audit_log.contains("caller=hermes action=service_status target=nginx result=allow"));
+    assert!(audit_log.contains("caller=hermes action=service_status target=hermes result=allow"));
 
     fs::remove_dir_all(temp).expect("temporary directory removed");
 }
@@ -180,7 +179,7 @@ fn openrc_service_start_runs_rc_service_without_shell() {
 
     Command::cargo_bin("ops-runbook")
         .expect("binary exists")
-        .args(["service", "start", "nginx"])
+        .args(["service", "start", "hermes"])
         .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
         .env("OPS_RUNBOOK_POLICY_PATH", &policy)
         .env("OPS_RUNBOOK_AUDIT_LOG", &audit)
@@ -192,7 +191,7 @@ fn openrc_service_start_runs_rc_service_without_shell() {
 
     assert_eq!(
         fs::read_to_string(record).expect("recorded args"),
-        "nginx\nstart\n"
+        "hermes\nstart\n"
     );
 
     fs::remove_dir_all(temp).expect("temporary directory removed");
@@ -206,7 +205,7 @@ fn openrc_logs_are_explicitly_unsupported() {
 
     Command::cargo_bin("ops-runbook")
         .expect("binary exists")
-        .args(["logs", "nginx", "--lines", "200"])
+        .args(["logs", "hermes", "--lines", "200"])
         .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
         .env("OPS_RUNBOOK_POLICY_PATH", &policy)
         .env("OPS_RUNBOOK_AUDIT_LOG", &audit)
@@ -267,7 +266,7 @@ fn denied_target_is_audited_and_not_executed() {
         .env("OPS_RUNBOOK_AUDIT_LOG", &audit)
         .env("OPS_RUNBOOK_SYSTEMCTL_PATH", &recorder)
         .env("OPS_RUNBOOK_RECORD_PATH", &record)
-        .env("SUDO_USER", "openclaw")
+        .env("SUDO_USER", "hermes")
         .assert()
         .failure()
         .stderr(predicate::str::contains("target not allowed: nginx"));
@@ -275,7 +274,7 @@ fn denied_target_is_audited_and_not_executed() {
     assert!(!record.exists());
     let audit_log = fs::read_to_string(audit).expect("audit log");
     assert!(audit_log.contains(
-        "caller=openclaw action=service_restart target=nginx result=deny reason=target_not_allowed"
+        "caller=hermes action=service_restart target=nginx result=deny reason=target_not_allowed"
     ));
 
     fs::remove_dir_all(temp).expect("temporary directory removed");
@@ -289,7 +288,7 @@ fn logs_rejects_line_count_above_policy_maximum() {
 
     Command::cargo_bin("ops-runbook")
         .expect("binary exists")
-        .args(["logs", "nginx", "--lines", "999999"])
+        .args(["logs", "hermes", "--lines", "999999"])
         .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
         .env("OPS_RUNBOOK_POLICY_PATH", &policy)
         .env("OPS_RUNBOOK_AUDIT_LOG", &audit)
@@ -311,7 +310,7 @@ fn direct_root_execution_is_rejected() {
 
     Command::cargo_bin("ops-runbook")
         .expect("binary exists")
-        .args(["service", "status", "nginx"])
+        .args(["service", "status", "hermes"])
         .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
         .env("OPS_RUNBOOK_POLICY_PATH", &policy)
         .env("SUDO_USER", "root")
@@ -496,5 +495,5 @@ fn write_recorder(dir: &Path, name: &str) -> PathBuf {
     path
 }
 
-const SAMPLE_POLICY: &str = include_str!("../configs/policy.systemd.toml");
-const OPENRC_POLICY: &str = include_str!("../configs/policy.openrc.toml");
+const SAMPLE_POLICY: &str = include_str!("../configs/policy.systemd.example.toml");
+const OPENRC_POLICY: &str = include_str!("../configs/policy.openrc.example.toml");

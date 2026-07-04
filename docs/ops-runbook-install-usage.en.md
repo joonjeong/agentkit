@@ -14,7 +14,7 @@ Supported service-manager backends:
 The trusted administrator runs:
 
 ```sh
-sudo ./ops-runbook bootstrap --user hermes --user openclaw
+sudo ./ops-runbook bootstrap --user hermes
 ```
 
 `bootstrap` configures the local host:
@@ -49,7 +49,7 @@ target/release/ops-runbook
 Copy or download the binary to the target host, then run:
 
 ```sh
-sudo ./ops-runbook bootstrap --user hermes --user openclaw
+sudo ./ops-runbook bootstrap --user hermes
 ```
 
 Useful options:
@@ -82,21 +82,20 @@ backend = "systemd"
 max_log_lines = 1000
 
 [callers.hermes]
-service_start = ["nginx", "coredns", "cloudflared"]
-service_stop = ["nginx", "coredns", "cloudflared"]
-service_restart = ["nginx", "coredns", "cloudflared"]
-service_reload = ["nginx", "coredns"]
-service_status = ["nginx", "coredns", "cloudflared"]
-logs = ["nginx", "coredns", "cloudflared"]
+# Allows service start, stop, restart, and reload.
+service_control = ["hermes", "cloudflared", "tailscale"]
+
+# Allows service status and logs.
+service_read = ["hermes", "cloudflared", "tailscale"]
 ```
 
 The caller is read from `SUDO_USER`. For example, when `hermes` runs:
 
 ```sh
-sudo /usr/local/sbin/ops-runbook service restart nginx
+sudo /usr/local/sbin/ops-runbook service restart hermes
 ```
 
-`ops-runbook` checks `callers.hermes.service_restart` for `nginx`.
+`ops-runbook` checks `callers.hermes.service_control` for `hermes`.
 
 For Alpine/OpenRC hosts, set:
 
@@ -116,14 +115,14 @@ per-service journald equivalent.
 Allowed operational commands:
 
 ```sh
-sudo /usr/local/sbin/ops-runbook service restart nginx
-sudo /usr/local/sbin/ops-runbook service start nginx
-sudo /usr/local/sbin/ops-runbook service stop nginx
-sudo /usr/local/sbin/ops-runbook service reload coredns
+sudo /usr/local/sbin/ops-runbook service restart hermes
+sudo /usr/local/sbin/ops-runbook service start cloudflared
+sudo /usr/local/sbin/ops-runbook service stop tailscale
+sudo /usr/local/sbin/ops-runbook service reload cloudflared
 sudo /usr/local/sbin/ops-runbook service status cloudflared
-sudo /usr/local/sbin/ops-runbook logs nginx --lines 200 # systemd only
+sudo /usr/local/sbin/ops-runbook logs hermes --lines 200 # systemd only
 sudo /usr/local/sbin/ops-runbook policy check
-sudo /usr/local/sbin/ops-runbook policy explain service_restart nginx
+sudo /usr/local/sbin/ops-runbook policy explain service_restart hermes
 sudo /usr/local/sbin/ops-runbook version
 ```
 
@@ -146,7 +145,7 @@ sudo /usr/local/sbin/ops-runbook policy check
 Explain a decision for the current sudo caller:
 
 ```sh
-sudo /usr/local/sbin/ops-runbook policy explain service_restart nginx
+sudo /usr/local/sbin/ops-runbook policy explain service_restart hermes
 ```
 
 Audit events are written to:

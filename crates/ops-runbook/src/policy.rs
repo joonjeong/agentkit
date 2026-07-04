@@ -24,7 +24,12 @@ impl Action {
     }
 
     pub fn source_field(self) -> &'static str {
-        self.as_str()
+        match self {
+            Self::ServiceStart | Self::ServiceStop | Self::ServiceRestart | Self::ServiceReload => {
+                "service_control"
+            }
+            Self::ServiceStatus | Self::Logs => "service_read",
+        }
     }
 
     pub fn parse(value: &str) -> Result<Self> {
@@ -66,12 +71,11 @@ pub fn validate_caller(caller: &str) -> Result<()> {
 
 pub fn allowed_targets(policy: &CallerPolicy, action: Action) -> &[String] {
     match action {
-        Action::ServiceStart => &policy.service_start,
-        Action::ServiceStop => &policy.service_stop,
-        Action::ServiceRestart => &policy.service_restart,
-        Action::ServiceReload => &policy.service_reload,
-        Action::ServiceStatus => &policy.service_status,
-        Action::Logs => &policy.logs,
+        Action::ServiceStart
+        | Action::ServiceStop
+        | Action::ServiceRestart
+        | Action::ServiceReload => &policy.service_control,
+        Action::ServiceStatus | Action::Logs => &policy.service_read,
     }
 }
 

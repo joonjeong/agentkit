@@ -54,17 +54,9 @@ impl fmt::Display for Backend {
 #[serde(deny_unknown_fields)]
 pub struct CallerPolicy {
     #[serde(default)]
-    pub service_start: Vec<String>,
+    pub service_control: Vec<String>,
     #[serde(default)]
-    pub service_stop: Vec<String>,
-    #[serde(default)]
-    pub service_restart: Vec<String>,
-    #[serde(default)]
-    pub service_reload: Vec<String>,
-    #[serde(default)]
-    pub service_status: Vec<String>,
-    #[serde(default)]
-    pub logs: Vec<String>,
+    pub service_read: Vec<String>,
 }
 
 impl Config {

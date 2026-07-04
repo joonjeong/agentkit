@@ -385,8 +385,8 @@ fn logrotate_contents(audit_log_path: &Path, sudo_log_path: &Path) -> String {
 
 fn sample_policy(backend: Backend) -> String {
     match backend {
-        Backend::Systemd => include_str!("../configs/policy.systemd.toml"),
-        Backend::Openrc => include_str!("../configs/policy.openrc.toml"),
+        Backend::Systemd => include_str!("../configs/policy.systemd.example.toml"),
+        Backend::Openrc => include_str!("../configs/policy.openrc.example.toml"),
     }
     .to_owned()
 }

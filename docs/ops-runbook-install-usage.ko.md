@@ -14,7 +14,7 @@
 신뢰할 수 있는 관리자가 다음 명령을 실행합니다.
 
 ```sh
-sudo ./ops-runbook bootstrap --user hermes --user openclaw
+sudo ./ops-runbook bootstrap --user hermes
 ```
 
 `bootstrap`은 대상 호스트를 구성합니다.
@@ -49,7 +49,7 @@ target/release/ops-runbook
 바이너리를 대상 호스트에 복사하거나 다운로드한 뒤 실행합니다.
 
 ```sh
-sudo ./ops-runbook bootstrap --user hermes --user openclaw
+sudo ./ops-runbook bootstrap --user hermes
 ```
 
 주요 옵션:
@@ -82,21 +82,20 @@ backend = "systemd"
 max_log_lines = 1000
 
 [callers.hermes]
-service_start = ["nginx", "coredns", "cloudflared"]
-service_stop = ["nginx", "coredns", "cloudflared"]
-service_restart = ["nginx", "coredns", "cloudflared"]
-service_reload = ["nginx", "coredns"]
-service_status = ["nginx", "coredns", "cloudflared"]
-logs = ["nginx", "coredns", "cloudflared"]
+# service start, stop, restart, reload 허용
+service_control = ["hermes", "cloudflared", "tailscale"]
+
+# service status와 logs 허용
+service_read = ["hermes", "cloudflared", "tailscale"]
 ```
 
 호출자는 `SUDO_USER`에서 읽습니다. 예를 들어 `hermes`가 다음을 실행하면:
 
 ```sh
-sudo /usr/local/sbin/ops-runbook service restart nginx
+sudo /usr/local/sbin/ops-runbook service restart hermes
 ```
 
-`ops-runbook`은 `callers.hermes.service_restart`에 `nginx`가 있는지 확인합니다.
+`ops-runbook`은 `callers.hermes.service_control`에 `hermes`가 있는지 확인합니다.
 
 Alpine/OpenRC 호스트에서는 다음처럼 설정합니다.
 
@@ -116,14 +115,14 @@ max_log_lines = 1000
 허용되는 운영 명령:
 
 ```sh
-sudo /usr/local/sbin/ops-runbook service restart nginx
-sudo /usr/local/sbin/ops-runbook service start nginx
-sudo /usr/local/sbin/ops-runbook service stop nginx
-sudo /usr/local/sbin/ops-runbook service reload coredns
+sudo /usr/local/sbin/ops-runbook service restart hermes
+sudo /usr/local/sbin/ops-runbook service start cloudflared
+sudo /usr/local/sbin/ops-runbook service stop tailscale
+sudo /usr/local/sbin/ops-runbook service reload cloudflared
 sudo /usr/local/sbin/ops-runbook service status cloudflared
-sudo /usr/local/sbin/ops-runbook logs nginx --lines 200 # systemd only
+sudo /usr/local/sbin/ops-runbook logs hermes --lines 200 # systemd only
 sudo /usr/local/sbin/ops-runbook policy check
-sudo /usr/local/sbin/ops-runbook policy explain service_restart nginx
+sudo /usr/local/sbin/ops-runbook policy explain service_restart hermes
 sudo /usr/local/sbin/ops-runbook version
 ```
 
@@ -146,7 +145,7 @@ sudo /usr/local/sbin/ops-runbook policy check
 현재 sudo 호출자의 정책 판단을 설명합니다.
 
 ```sh
-sudo /usr/local/sbin/ops-runbook policy explain service_restart nginx
+sudo /usr/local/sbin/ops-runbook policy explain service_restart hermes
 ```
 
 감사 로그는 다음 파일에 기록됩니다.

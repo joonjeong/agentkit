@@ -1,0 +1,19 @@
+# Example ops-runbook policy for OpenRC hosts.
+#
+# Runtime policy is installed to /etc/ops-runbook/policy.toml. Edit that file
+# on each host after bootstrap. This example keeps one caller and a small
+# service allowlist. The OpenRC backend supports service control and status;
+# logs return an explicit unsupported-backend error.
+
+version = 1
+
+[defaults]
+backend = "openrc"
+max_log_lines = 1000
+
+[callers.hermes]
+# Allows service start, stop, restart, and reload.
+service_control = ["hermes", "cloudflared", "tailscale"]
+
+# Allows service status and logs. Logs are currently unsupported on OpenRC.
+service_read = ["hermes", "cloudflared", "tailscale"]
