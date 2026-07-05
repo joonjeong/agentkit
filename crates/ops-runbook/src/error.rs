@@ -31,11 +31,11 @@ pub enum Error {
     #[error("invalid notification option: {0}")]
     InvalidNotificationOption(String),
 
-    #[error("notification destination not allowed: {0}")]
-    NotificationDestinationNotAllowed(String),
+    #[error("notification channel not allowed: {0}")]
+    NotificationChannelNotAllowed(String),
 
-    #[error("notification destination not found: {0}")]
-    NotificationDestinationNotFound(String),
+    #[error("notification channel not found: {0}")]
+    NotificationChannelNotFound(String),
 
     #[error("bootstrap must be run as root")]
     BootstrapRequiresRoot,

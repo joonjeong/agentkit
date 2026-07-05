@@ -7,7 +7,6 @@ use clap::ValueEnum;
 use serde::Deserialize;
 
 use crate::error::{Error, Result};
-use crate::notification;
 use crate::policy::{validate_caller, validate_target, Action};
 
 pub const DEFAULT_POLICY_PATH: &str = "/etc/ops-runbook/policy.toml";
@@ -21,7 +20,7 @@ pub struct Config {
     #[serde(default)]
     pub callers: HashMap<String, CallerPolicy>,
     #[serde(default)]
-    pub notifications: NotificationConfig,
+    pub channels: HashMap<String, NotificationChannel>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -61,21 +60,19 @@ pub struct CallerPolicy {
     #[serde(default)]
     pub service_read: Vec<String>,
     #[serde(default)]
-    pub alarms: Vec<String>,
+    pub notify: Vec<String>,
 }
 
-#[derive(Debug, Default, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct NotificationConfig {
-    #[serde(default)]
-    pub telegram: HashMap<String, TelegramDestination>,
-    #[serde(default)]
-    pub discord: HashMap<String, DiscordDestination>,
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type", rename_all = "lowercase", deny_unknown_fields)]
+pub enum NotificationChannel {
+    Telegram(TelegramChannel),
+    Discord(DiscordChannel),
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct TelegramDestination {
+pub struct TelegramChannel {
     pub chat_id: String,
     pub bot_token_env: Option<String>,
     pub bot_token_file: Option<PathBuf>,
@@ -83,7 +80,7 @@ pub struct TelegramDestination {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct DiscordDestination {
+pub struct DiscordChannel {
     pub webhook_url_env: Option<String>,
     pub webhook_url_file: Option<PathBuf>,
 }
@@ -114,57 +111,50 @@ impl Config {
                 Action::ServiceRestart,
                 Action::ServiceReload,
                 Action::ServiceStatus,
-                Action::AlarmSend,
+                Action::Notify,
                 Action::Logs,
             ] {
                 for target in crate::policy::allowed_targets(policy, action) {
-                    if action == Action::AlarmSend {
-                        notification::validate_destination_ref(target)?;
-                    } else {
-                        validate_target(target)?;
-                    }
+                    validate_target(target)?;
                 }
             }
         }
-        self.validate_notifications()?;
+        self.validate_channels()?;
 
         Ok(())
     }
 
-    fn validate_notifications(&self) -> Result<()> {
-        for name in self.notifications.telegram.keys() {
+    fn validate_channels(&self) -> Result<()> {
+        for (name, channel) in &self.channels {
             validate_target(name)?;
-        }
-        for name in self.notifications.discord.keys() {
-            validate_target(name)?;
-        }
-
-        for (name, destination) in &self.notifications.telegram {
-            validate_secret_ref(
-                &format!("notifications.telegram.{name}.bot_token"),
-                destination.bot_token_env.as_deref(),
-                destination.bot_token_file.as_deref(),
-            )?;
-            if destination.chat_id.trim().is_empty() {
-                return Err(Error::InvalidNotificationOption(format!(
-                    "notifications.telegram.{name}.chat_id must not be empty"
-                )));
+            match channel {
+                NotificationChannel::Telegram(channel) => {
+                    validate_secret_ref(
+                        &format!("channels.{name}.bot_token"),
+                        channel.bot_token_env.as_deref(),
+                        channel.bot_token_file.as_deref(),
+                    )?;
+                    if channel.chat_id.trim().is_empty() {
+                        return Err(Error::InvalidNotificationOption(format!(
+                            "channels.{name}.chat_id must not be empty"
+                        )));
+                    }
+                }
+                NotificationChannel::Discord(channel) => {
+                    validate_secret_ref(
+                        &format!("channels.{name}.webhook_url"),
+                        channel.webhook_url_env.as_deref(),
+                        channel.webhook_url_file.as_deref(),
+                    )?;
+                }
             }
         }
 
-        for (name, destination) in &self.notifications.discord {
-            validate_secret_ref(
-                &format!("notifications.discord.{name}.webhook_url"),
-                destination.webhook_url_env.as_deref(),
-                destination.webhook_url_file.as_deref(),
-            )?;
-        }
-
         for (caller, policy) in &self.callers {
-            for destination in &policy.alarms {
-                if self.notification_destination(destination).is_none() {
+            for channel in &policy.notify {
+                if !self.channels.contains_key(channel) {
                     return Err(Error::InvalidNotificationOption(format!(
-                        "callers.{caller}.alarms references unknown destination: {destination}"
+                        "callers.{caller}.notify references unknown channel: {channel}"
                     )));
                 }
             }
@@ -173,24 +163,8 @@ impl Config {
         Ok(())
     }
 
-    pub fn notification_destination(
-        &self,
-        destination: &str,
-    ) -> Option<NotificationDestination<'_>> {
-        let (provider, name) = destination.split_once('.')?;
-        match provider {
-            "telegram" => self
-                .notifications
-                .telegram
-                .get(name)
-                .map(NotificationDestination::Telegram),
-            "discord" => self
-                .notifications
-                .discord
-                .get(name)
-                .map(NotificationDestination::Discord),
-            _ => None,
-        }
+    pub fn notification_channel(&self, channel: &str) -> Option<&NotificationChannel> {
+        self.channels.get(channel)
     }
 
     pub fn max_log_lines(&self) -> u32 {
@@ -200,11 +174,6 @@ impl Config {
     pub fn backend(&self) -> Backend {
         self.defaults.backend.unwrap_or(Backend::Systemd)
     }
-}
-
-pub enum NotificationDestination<'a> {
-    Telegram(&'a TelegramDestination),
-    Discord(&'a DiscordDestination),
 }
 
 fn validate_secret_ref(name: &str, env: Option<&str>, file: Option<&Path>) -> Result<()> {

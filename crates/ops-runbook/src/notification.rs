@@ -3,13 +3,15 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use reqwest::blocking::Client;
+use reqwest::StatusCode;
 use serde::Serialize;
 
-use crate::config::{DiscordDestination, NotificationDestination, TelegramDestination};
+use crate::config::{DiscordChannel, NotificationChannel, TelegramChannel};
 use crate::error::{Error, Result};
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
-const MAX_MESSAGE_LEN: usize = 1800;
+const MAX_MESSAGE_LEN: usize = 1600;
+const MAX_ERROR_BODY_LEN: usize = 512;
 
 #[derive(Debug, Clone, Copy, clap::ValueEnum)]
 pub enum Severity {
@@ -28,50 +30,34 @@ impl Severity {
     }
 }
 
-pub struct Alarm<'a> {
+pub struct Notification<'a> {
     pub caller: &'a str,
-    pub destination: &'a str,
+    pub channel: &'a str,
     pub severity: Severity,
     pub title: Option<&'a str>,
     pub message: &'a str,
 }
 
-pub fn validate_destination_ref(destination: &str) -> Result<()> {
-    let Some((provider, name)) = destination.split_once('.') else {
-        return Err(Error::InvalidNotificationOption(format!(
-            "notification destination must be provider.name: {destination}"
-        )));
-    };
-
-    if !matches!(provider, "telegram" | "discord") {
-        return Err(Error::InvalidNotificationOption(format!(
-            "unsupported notification provider: {provider}"
-        )));
-    }
-
-    crate::policy::validate_target(name)
-}
-
-pub fn validate_alarm_text(title: Option<&str>, message: &str) -> Result<()> {
+pub fn validate_message_text(title: Option<&str>, message: &str) -> Result<()> {
     if message.trim().is_empty() {
         return Err(Error::InvalidNotificationOption(
-            "alarm message must not be empty".to_owned(),
+            "notify message must not be empty".to_owned(),
         ));
     }
     if message.len() > MAX_MESSAGE_LEN {
         return Err(Error::InvalidNotificationOption(format!(
-            "alarm message must be at most {MAX_MESSAGE_LEN} bytes"
+            "notify message must be at most {MAX_MESSAGE_LEN} bytes"
         )));
     }
     if let Some(title) = title {
         if title.trim().is_empty() {
             return Err(Error::InvalidNotificationOption(
-                "alarm title must not be empty".to_owned(),
+                "notify title must not be empty".to_owned(),
             ));
         }
         if title.len() > 160 {
             return Err(Error::InvalidNotificationOption(
-                "alarm title must be at most 160 bytes".to_owned(),
+                "notify title must be at most 160 bytes".to_owned(),
             ));
         }
     }
@@ -79,32 +65,30 @@ pub fn validate_alarm_text(title: Option<&str>, message: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn send(destination: NotificationDestination<'_>, alarm: &Alarm<'_>) -> Result<()> {
+pub fn send(channel: &NotificationChannel, notification: &Notification<'_>) -> Result<()> {
     let client = Client::builder()
         .timeout(DEFAULT_TIMEOUT)
         .build()
         .map_err(|source| Error::NotificationSend {
-            destination: alarm.destination.to_owned(),
+            destination: notification.channel.to_owned(),
             reason: source.to_string(),
         })?;
 
-    match destination {
-        NotificationDestination::Telegram(destination) => {
-            send_telegram(&client, destination, alarm)
-        }
-        NotificationDestination::Discord(destination) => send_discord(&client, destination, alarm),
+    match channel {
+        NotificationChannel::Telegram(channel) => send_telegram(&client, channel, notification),
+        NotificationChannel::Discord(channel) => send_discord(&client, channel, notification),
     }
 }
 
 fn send_telegram(
     client: &Client,
-    destination: &TelegramDestination,
-    alarm: &Alarm<'_>,
+    channel: &TelegramChannel,
+    notification: &Notification<'_>,
 ) -> Result<()> {
     let token = read_secret(
         "telegram bot token",
-        destination.bot_token_env.as_deref(),
-        destination.bot_token_file.as_deref(),
+        channel.bot_token_env.as_deref(),
+        channel.bot_token_file.as_deref(),
     )?;
     let base_url =
         if cfg!(debug_assertions) && std::env::var_os("OPS_RUNBOOK_TEST_OVERRIDES").is_some() {
@@ -115,32 +99,32 @@ fn send_telegram(
         };
     let url = format!("{}/bot{token}/sendMessage", base_url.trim_end_matches('/'));
     let payload = TelegramPayload {
-        chat_id: &destination.chat_id,
-        text: &format_alarm(alarm),
+        chat_id: &channel.chat_id,
+        text: &format_notification(notification),
         disable_web_page_preview: true,
     };
 
-    post_json(client, alarm.destination, &url, &payload)
+    post_json(client, notification.channel, &url, &payload)
 }
 
 fn send_discord(
     client: &Client,
-    destination: &DiscordDestination,
-    alarm: &Alarm<'_>,
+    channel: &DiscordChannel,
+    notification: &Notification<'_>,
 ) -> Result<()> {
     let url = read_secret(
         "discord webhook url",
-        destination.webhook_url_env.as_deref(),
-        destination.webhook_url_file.as_deref(),
+        channel.webhook_url_env.as_deref(),
+        channel.webhook_url_file.as_deref(),
     )?;
     let payload = DiscordPayload {
-        content: &format_alarm(alarm),
+        content: &format_notification(notification),
     };
 
-    post_json(client, alarm.destination, &url, &payload)
+    post_json(client, notification.channel, &url, &payload)
 }
 
-fn post_json<T>(client: &Client, destination: &str, url: &str, payload: &T) -> Result<()>
+fn post_json<T>(client: &Client, channel: &str, url: &str, payload: &T) -> Result<()>
 where
     T: Serialize + ?Sized,
 {
@@ -149,14 +133,11 @@ where
             let path = PathBuf::from(path);
             let payload =
                 serde_json::to_string(payload).map_err(|source| Error::NotificationSend {
-                    destination: destination.to_owned(),
+                    destination: channel.to_owned(),
                     reason: source.to_string(),
                 })?;
-            fs::write(
-                &path,
-                format!("destination={destination}\nurl={url}\n{payload}\n"),
-            )
-            .map_err(|source| Error::Io { path, source })?;
+            fs::write(&path, format!("channel={channel}\nurl={url}\n{payload}\n"))
+                .map_err(|source| Error::Io { path, source })?;
             return Ok(());
         }
     }
@@ -167,17 +148,40 @@ where
             .json(payload)
             .send()
             .map_err(|source| Error::NotificationSend {
-                destination: destination.to_owned(),
+                destination: channel.to_owned(),
                 reason: source.to_string(),
             })?;
-    if response.status().is_success() {
+    let status = response.status();
+    if status.is_success() {
         return Ok(());
     }
 
+    let body = response
+        .text()
+        .unwrap_or_default()
+        .trim()
+        .chars()
+        .take(MAX_ERROR_BODY_LEN)
+        .collect::<String>();
+    let reason = http_error_reason(status, &body);
+
     Err(Error::NotificationSend {
-        destination: destination.to_owned(),
-        reason: format!("http status {}", response.status()),
+        destination: channel.to_owned(),
+        reason,
     })
+}
+
+fn http_error_reason(status: StatusCode, body: &str) -> String {
+    let body = body
+        .trim()
+        .chars()
+        .take(MAX_ERROR_BODY_LEN)
+        .collect::<String>();
+    if body.is_empty() {
+        format!("http status {status}")
+    } else {
+        format!("http status {status}: {body}")
+    }
 }
 
 fn read_secret(name: &str, env: Option<&str>, file: Option<&Path>) -> Result<String> {
@@ -204,14 +208,17 @@ fn read_secret(name: &str, env: Option<&str>, file: Option<&Path>) -> Result<Str
     Ok(value)
 }
 
-fn format_alarm(alarm: &Alarm<'_>) -> String {
+fn format_notification(notification: &Notification<'_>) -> String {
     let mut lines = Vec::new();
-    match alarm.title {
-        Some(title) => lines.push(format!("[{}] {title}", alarm.severity.as_str())),
-        None => lines.push(format!("[{}] ops-runbook alarm", alarm.severity.as_str())),
+    match notification.title {
+        Some(title) => lines.push(format!("[{}] {title}", notification.severity.as_str())),
+        None => lines.push(format!(
+            "[{}] ops-runbook notify",
+            notification.severity.as_str()
+        )),
     }
-    lines.push(format!("caller: {}", alarm.caller));
-    lines.push(alarm.message.to_owned());
+    lines.push(format!("caller: {}", notification.caller));
+    lines.push(notification.message.to_owned());
     lines.join("\n")
 }
 
@@ -225,4 +232,27 @@ struct TelegramPayload<'a> {
 #[derive(Serialize)]
 struct DiscordPayload<'a> {
     content: &'a str,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn http_error_reason_includes_response_body() {
+        assert_eq!(
+            http_error_reason(StatusCode::BAD_REQUEST, "invalid chat id"),
+            "http status 400 Bad Request: invalid chat id"
+        );
+    }
+
+    #[test]
+    fn http_error_reason_truncates_long_response_body() {
+        let reason = http_error_reason(StatusCode::TOO_MANY_REQUESTS, &"x".repeat(600));
+
+        assert_eq!(
+            reason,
+            format!("http status 429 Too Many Requests: {}", "x".repeat(512))
+        );
+    }
 }

@@ -11,11 +11,13 @@ version = 1
 backend = "openrc"
 max_log_lines = 1000
 
-[notifications.telegram.ops]
+[channels.telegram_myriad]
+type = "telegram"
 chat_id = "123456789"
 bot_token_file = "/etc/ops-runbook/secrets/telegram-bot-token"
 
-[notifications.discord.ops]
+[channels.discord_myriad]
+type = "discord"
 webhook_url_file = "/etc/ops-runbook/secrets/discord-webhook-url"
 
 [callers.hermes]
@@ -25,5 +27,5 @@ service_control = ["hermes", "cloudflared", "tailscale"]
 # Allows service status and logs. Logs are currently unsupported on OpenRC.
 service_read = ["hermes", "cloudflared", "tailscale"]
 
-# Allows sending alarms without exposing provider credentials to the caller.
-alarms = ["telegram.ops", "discord.ops"]
+# Allows sending notifications without exposing provider credentials to the caller.
+notify = ["telegram_myriad", "discord_myriad"]

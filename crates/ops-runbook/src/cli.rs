@@ -8,7 +8,7 @@ use crate::audit;
 use crate::bootstrap::{self, BootstrapArgs};
 use crate::config::{configured_policy_path, Backend, Config};
 use crate::error::{Error, Result};
-use crate::notification::{self, Alarm, Severity};
+use crate::notification::{self, Notification, Severity};
 use crate::policy::{is_allowed, validate_target, Action};
 use crate::runner;
 
@@ -32,8 +32,8 @@ enum Command {
     Service(ServiceCommand),
     /// Show allowlisted service logs.
     Logs(LogsArgs),
-    /// Send an allowlisted alarm notification.
-    Alarm(AlarmCommand),
+    /// Send an allowlisted notification.
+    Notify(NotifyArgs),
     /// Validate or inspect policy.
     Policy(PolicyCommand),
     /// Print the ops-runbook version.
@@ -73,31 +73,19 @@ struct LogsArgs {
 }
 
 #[derive(Debug, Args)]
-struct AlarmCommand {
-    #[command(subcommand)]
-    command: AlarmSubcommand,
-}
+struct NotifyArgs {
+    /// Notification channel name from policy channels.
+    channel: String,
 
-#[derive(Debug, Subcommand)]
-enum AlarmSubcommand {
-    /// Send a message to an allowlisted notification destination.
-    Send(AlarmSendArgs),
-}
-
-#[derive(Debug, Args)]
-struct AlarmSendArgs {
-    /// Notification destination in provider.name form, such as telegram.ops.
-    destination: String,
-
-    /// Alarm severity.
+    /// Notification severity.
     #[arg(long, value_enum, default_value_t = Severity::Info)]
     severity: Severity,
 
-    /// Optional short alarm title.
+    /// Optional short notification title.
     #[arg(long)]
     title: Option<String>,
 
-    /// Alarm message body.
+    /// Notification message body.
     #[arg(long)]
     message: String,
 }
@@ -173,9 +161,7 @@ where
             }
         },
         Command::Logs(args) => execute(Action::Logs, &args.service, Some(args.lines), &policy_path),
-        Command::Alarm(command) => match command.command {
-            AlarmSubcommand::Send(args) => send_alarm(args, &policy_path),
-        },
+        Command::Notify(args) => notify(args, &policy_path),
         Command::Policy(command) => match command.command {
             PolicySubcommand::Check(args) => {
                 check_policy(args.policy_path.as_deref().unwrap_or(&policy_path))
@@ -244,7 +230,7 @@ fn explain_policy(policy_path: &Path) -> Result<i32> {
             "    service_read: {}",
             format_string_list(&caller_policy.service_read)
         );
-        println!("    alarms: {}", format_string_list(&caller_policy.alarms));
+        println!("    notify: {}", format_string_list(&caller_policy.notify));
         println!("    commands:");
         for service in &caller_policy.service_control {
             println!("      service start {service}");
@@ -258,8 +244,8 @@ fn explain_policy(policy_path: &Path) -> Result<i32> {
                 println!("      logs {service}");
             }
         }
-        for destination in &caller_policy.alarms {
-            println!("      alarm send {destination}");
+        for channel in &caller_policy.notify {
+            println!("      notify {channel}");
         }
     }
 
@@ -295,9 +281,9 @@ fn template_policy(args: PolicyTemplateArgs) -> Result<i32> {
     Ok(0)
 }
 
-fn send_alarm(args: AlarmSendArgs, policy_path: &Path) -> Result<i32> {
-    notification::validate_destination_ref(&args.destination)?;
-    notification::validate_alarm_text(args.title.as_deref(), &args.message)?;
+fn notify(args: NotifyArgs, policy_path: &Path) -> Result<i32> {
+    validate_target(&args.channel)?;
+    notification::validate_message_text(args.title.as_deref(), &args.message)?;
 
     let caller = caller_from_sudo()?;
     let config = load_valid_config(policy_path)?;
@@ -306,59 +292,59 @@ fn send_alarm(args: AlarmSendArgs, policy_path: &Path) -> Result<i32> {
         audit::write(
             &audit_path,
             &caller,
-            Action::AlarmSend.as_str(),
-            &args.destination,
+            Action::Notify.as_str(),
+            &args.channel,
             "deny",
             Some("caller_not_allowed"),
         )?;
         return Err(Error::CallerNotAllowed(caller));
     };
 
-    if !is_allowed(caller_policy, Action::AlarmSend, &args.destination) {
+    if !is_allowed(caller_policy, Action::Notify, &args.channel) {
         audit::write(
             &audit_path,
             &caller,
-            Action::AlarmSend.as_str(),
-            &args.destination,
+            Action::Notify.as_str(),
+            &args.channel,
             "deny",
-            Some("destination_not_allowed"),
+            Some("channel_not_allowed"),
         )?;
-        return Err(Error::NotificationDestinationNotAllowed(args.destination));
+        return Err(Error::NotificationChannelNotAllowed(args.channel));
     }
 
-    let Some(destination) = config.notification_destination(&args.destination) else {
+    let Some(channel) = config.notification_channel(&args.channel) else {
         audit::write(
             &audit_path,
             &caller,
-            Action::AlarmSend.as_str(),
-            &args.destination,
+            Action::Notify.as_str(),
+            &args.channel,
             "deny",
-            Some("destination_not_found"),
+            Some("channel_not_found"),
         )?;
-        return Err(Error::NotificationDestinationNotFound(args.destination));
+        return Err(Error::NotificationChannelNotFound(args.channel));
     };
 
     audit::write(
         &audit_path,
         &caller,
-        Action::AlarmSend.as_str(),
-        &args.destination,
+        Action::Notify.as_str(),
+        &args.channel,
         "allow",
         None,
     )?;
-    let alarm = Alarm {
+    let notification = Notification {
         caller: &caller,
-        destination: &args.destination,
+        channel: &args.channel,
         severity: args.severity,
         title: args.title.as_deref(),
         message: &args.message,
     };
-    notification::send(destination, &alarm)?;
+    notification::send(channel, &notification)?;
     audit::write(
         &audit_path,
         &caller,
-        Action::AlarmSend.as_str(),
-        &args.destination,
+        Action::Notify.as_str(),
+        &args.channel,
         "executed",
         Some("sent"),
     )?;
@@ -438,9 +424,9 @@ fn execute(
         Action::ServiceReload => runner::service(config.backend(), "reload", target),
         Action::ServiceStatus => runner::service(config.backend(), "status", target),
         Action::Logs => runner::logs(config.backend(), target, lines),
-        Action::AlarmSend => {
+        Action::Notify => {
             return Err(Error::InvalidPolicyOption(
-                "alarm_send must use alarm send".to_owned(),
+                "notify must use notify command".to_owned(),
             ))
         }
     }?;
