@@ -19,6 +19,8 @@ pub struct Config {
     pub defaults: Defaults,
     #[serde(default)]
     pub callers: HashMap<String, CallerPolicy>,
+    #[serde(default)]
+    pub channels: HashMap<String, NotificationChannel>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -57,6 +59,30 @@ pub struct CallerPolicy {
     pub service_control: Vec<String>,
     #[serde(default)]
     pub service_read: Vec<String>,
+    #[serde(default)]
+    pub notify: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type", rename_all = "lowercase", deny_unknown_fields)]
+pub enum NotificationChannel {
+    Telegram(TelegramChannel),
+    Discord(DiscordChannel),
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TelegramChannel {
+    pub chat_id: String,
+    pub bot_token_env: Option<String>,
+    pub bot_token_file: Option<PathBuf>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DiscordChannel {
+    pub webhook_url_env: Option<String>,
+    pub webhook_url_file: Option<PathBuf>,
 }
 
 impl Config {
@@ -85,6 +111,7 @@ impl Config {
                 Action::ServiceRestart,
                 Action::ServiceReload,
                 Action::ServiceStatus,
+                Action::Notify,
                 Action::Logs,
             ] {
                 for target in crate::policy::allowed_targets(policy, action) {
@@ -92,8 +119,52 @@ impl Config {
                 }
             }
         }
+        self.validate_channels()?;
 
         Ok(())
+    }
+
+    fn validate_channels(&self) -> Result<()> {
+        for (name, channel) in &self.channels {
+            validate_target(name)?;
+            match channel {
+                NotificationChannel::Telegram(channel) => {
+                    validate_secret_ref(
+                        &format!("channels.{name}.bot_token"),
+                        channel.bot_token_env.as_deref(),
+                        channel.bot_token_file.as_deref(),
+                    )?;
+                    if channel.chat_id.trim().is_empty() {
+                        return Err(Error::InvalidNotificationOption(format!(
+                            "channels.{name}.chat_id must not be empty"
+                        )));
+                    }
+                }
+                NotificationChannel::Discord(channel) => {
+                    validate_secret_ref(
+                        &format!("channels.{name}.webhook_url"),
+                        channel.webhook_url_env.as_deref(),
+                        channel.webhook_url_file.as_deref(),
+                    )?;
+                }
+            }
+        }
+
+        for (caller, policy) in &self.callers {
+            for channel in &policy.notify {
+                if !self.channels.contains_key(channel) {
+                    return Err(Error::InvalidNotificationOption(format!(
+                        "callers.{caller}.notify references unknown channel: {channel}"
+                    )));
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn notification_channel(&self, channel: &str) -> Option<&NotificationChannel> {
+        self.channels.get(channel)
     }
 
     pub fn max_log_lines(&self) -> u32 {
@@ -102,6 +173,23 @@ impl Config {
 
     pub fn backend(&self) -> Backend {
         self.defaults.backend.unwrap_or(Backend::Systemd)
+    }
+}
+
+fn validate_secret_ref(name: &str, env: Option<&str>, file: Option<&Path>) -> Result<()> {
+    match (env, file) {
+        (Some(env), None) if !env.trim().is_empty() => Ok(()),
+        (None, Some(file)) if file.is_absolute() => Ok(()),
+        (Some(_), Some(_)) => Err(Error::InvalidNotificationOption(format!(
+            "{name} must use either env or file, not both"
+        ))),
+        (None, Some(file)) => Err(Error::InvalidNotificationOption(format!(
+            "{name}_file must be absolute: {}",
+            file.display()
+        ))),
+        _ => Err(Error::InvalidNotificationOption(format!(
+            "{name} must configure env or file"
+        ))),
     }
 }
 

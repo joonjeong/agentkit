@@ -14,6 +14,7 @@ sudo /usr/local/sbin/ops-runbook service stop tailscale
 sudo /usr/local/sbin/ops-runbook service reload cloudflared
 sudo /usr/local/sbin/ops-runbook service status cloudflared
 sudo /usr/local/sbin/ops-runbook logs hermes --lines 200
+sudo /usr/local/sbin/ops-runbook notify telegram_myriad --severity critical --message "disk full"
 sudo /usr/local/sbin/ops-runbook policy check
 sudo /usr/local/sbin/ops-runbook policy explain
 sudo /usr/local/sbin/ops-runbook policy explain --policy-path ./policy.toml
@@ -24,9 +25,10 @@ The binary never exposes `exec`, `shell`, raw `systemctl`, raw `apt`, or
 `ansible-playbook` commands. It reads the original caller from `SUDO_USER`,
 rejects direct root execution, validates the target name, checks the caller's
 allowlist, writes `/var/log/ops-runbook/audit.log`, and then executes a fixed
-service-manager command path without going through a shell. The default backend
-is `systemd`; Alpine/OpenRC service control can be enabled with `backend =
-"openrc"` in the policy defaults.
+service-manager command path without going through a shell. It can also send
+allowlisted notifications to Telegram or Discord without exposing provider
+credentials to the caller. The default backend is `systemd`; Alpine/OpenRC
+service control can be enabled with `backend = "openrc"` in the policy defaults.
 
 Build:
 
@@ -53,7 +55,7 @@ sudoers rule is rendered from
 The generated sudoers rule grants only:
 
 ```sudoers
-%ops-agent ALL=(root) NOPASSWD: /usr/local/sbin/ops-runbook service start *, /usr/local/sbin/ops-runbook service stop *, /usr/local/sbin/ops-runbook service restart *, /usr/local/sbin/ops-runbook service reload *, /usr/local/sbin/ops-runbook service status *, /usr/local/sbin/ops-runbook logs *, /usr/local/sbin/ops-runbook policy check, /usr/local/sbin/ops-runbook policy check *, /usr/local/sbin/ops-runbook policy explain, /usr/local/sbin/ops-runbook policy explain *, /usr/local/sbin/ops-runbook version
+%ops-agent ALL=(root) NOPASSWD: /usr/local/sbin/ops-runbook service start *, /usr/local/sbin/ops-runbook service stop *, /usr/local/sbin/ops-runbook service restart *, /usr/local/sbin/ops-runbook service reload *, /usr/local/sbin/ops-runbook service status *, /usr/local/sbin/ops-runbook logs *, /usr/local/sbin/ops-runbook notify *, /usr/local/sbin/ops-runbook policy check, /usr/local/sbin/ops-runbook policy check *, /usr/local/sbin/ops-runbook policy explain, /usr/local/sbin/ops-runbook policy explain *, /usr/local/sbin/ops-runbook version
 ```
 
 Useful bootstrap options:

@@ -75,7 +75,11 @@ fn policy_explain_dumps_validated_policy() {
                 .and(predicate::str::contains("service stop hermes"))
                 .and(predicate::str::contains("service restart hermes"))
                 .and(predicate::str::contains("service status cloudflared"))
-                .and(predicate::str::contains("logs tailscale")),
+                .and(predicate::str::contains("logs tailscale"))
+                .and(predicate::str::contains(
+                    "    notify: [\"telegram_myriad\", \"discord_myriad\"]",
+                ))
+                .and(predicate::str::contains("notify telegram_myriad")),
         );
 
     fs::remove_dir_all(temp).expect("temporary directory removed");
@@ -233,6 +237,131 @@ fn service_stop_runs_fixed_systemctl_without_shell() {
         fs::read_to_string(record).expect("recorded args"),
         "--no-pager\nstop\nhermes.service\n"
     );
+
+    fs::remove_dir_all(temp).expect("temporary directory removed");
+}
+
+#[test]
+fn notify_posts_to_allowlisted_telegram_channel() {
+    let temp = temp_dir("ops-runbook-notify-telegram");
+    let policy = write_policy(&temp, TELEGRAM_NOTIFY_POLICY);
+    let audit = temp.join("audit.log");
+    let record = temp.join("notification.record");
+
+    Command::cargo_bin("ops-runbook")
+        .expect("binary exists")
+        .args([
+            "notify",
+            "telegram_myriad",
+            "--severity",
+            "critical",
+            "--title",
+            "disk full",
+            "--message",
+            "/var is 95%",
+        ])
+        .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
+        .env("OPS_RUNBOOK_POLICY_PATH", &policy)
+        .env("OPS_RUNBOOK_AUDIT_LOG", &audit)
+        .env("OPS_RUNBOOK_TELEGRAM_API_BASE", "https://telegram.test")
+        .env("OPS_RUNBOOK_NOTIFICATION_RECORD_PATH", &record)
+        .env("OPS_RUNBOOK_TEST_TELEGRAM_TOKEN", "telegram-token")
+        .env("SUDO_USER", "hermes")
+        .assert()
+        .success();
+
+    let request = fs::read_to_string(record).expect("notification recorded");
+    assert!(request.contains("channel=telegram_myriad"));
+    assert!(request.contains("url=https://telegram.test/bottelegram-token/sendMessage"));
+    assert!(request.contains(r#""chat_id":"123456789""#));
+    assert!(request.contains(r#""text":"[critical] disk full\ncaller: hermes\n/var is 95%""#));
+
+    let audit_log = fs::read_to_string(audit).expect("audit log");
+    assert!(audit_log.contains("caller=hermes action=notify target=telegram_myriad result=allow"));
+    assert!(audit_log.contains(
+        "caller=hermes action=notify target=telegram_myriad result=executed reason=sent"
+    ));
+
+    fs::remove_dir_all(temp).expect("temporary directory removed");
+}
+
+#[test]
+fn notify_posts_to_allowlisted_discord_channel() {
+    let temp = temp_dir("ops-runbook-notify-discord");
+    let policy = write_policy(
+        &temp,
+        r#"
+version = 1
+
+[defaults]
+backend = "systemd"
+max_log_lines = 1000
+
+[channels.discord_myriad]
+type = "discord"
+webhook_url_env = "OPS_RUNBOOK_TEST_DISCORD_WEBHOOK"
+
+[callers.hermes]
+notify = ["discord_myriad"]
+"#,
+    );
+    let audit = temp.join("audit.log");
+    let record = temp.join("notification.record");
+
+    Command::cargo_bin("ops-runbook")
+        .expect("binary exists")
+        .args([
+            "notify",
+            "discord_myriad",
+            "--severity",
+            "warning",
+            "--message",
+            "service degraded",
+        ])
+        .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
+        .env("OPS_RUNBOOK_POLICY_PATH", &policy)
+        .env("OPS_RUNBOOK_AUDIT_LOG", &audit)
+        .env("OPS_RUNBOOK_NOTIFICATION_RECORD_PATH", &record)
+        .env(
+            "OPS_RUNBOOK_TEST_DISCORD_WEBHOOK",
+            "https://discord.test/webhook",
+        )
+        .env("SUDO_USER", "hermes")
+        .assert()
+        .success();
+
+    let request = fs::read_to_string(record).expect("notification recorded");
+    assert!(request.contains("channel=discord_myriad"));
+    assert!(request.contains("url=https://discord.test/webhook"));
+    assert!(request
+        .contains(r#""content":"[warning] ops-runbook notify\ncaller: hermes\nservice degraded""#));
+
+    fs::remove_dir_all(temp).expect("temporary directory removed");
+}
+
+#[test]
+fn notify_rejects_unallowlisted_channel_without_posting() {
+    let temp = temp_dir("ops-runbook-notify-denied");
+    let policy = write_policy(&temp, TELEGRAM_NOTIFY_POLICY);
+    let audit = temp.join("audit.log");
+
+    Command::cargo_bin("ops-runbook")
+        .expect("binary exists")
+        .args(["notify", "telegram_other", "--message", "should not send"])
+        .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
+        .env("OPS_RUNBOOK_POLICY_PATH", &policy)
+        .env("OPS_RUNBOOK_AUDIT_LOG", &audit)
+        .env("SUDO_USER", "hermes")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "notification channel not allowed: telegram_other",
+        ));
+
+    let audit_log = fs::read_to_string(audit).expect("audit log");
+    assert!(audit_log.contains(
+        "caller=hermes action=notify target=telegram_other result=deny reason=channel_not_allowed"
+    ));
 
     fs::remove_dir_all(temp).expect("temporary directory removed");
 }
@@ -470,6 +599,7 @@ fn bootstrap_installs_binary_and_writes_configurable_files() {
     assert!(sudoers_contents.contains("Defaults:%custom-ops"));
     assert!(sudoers_contents.contains(&format!("logfile=\"{}\"", sudo_log.display())));
     assert!(sudoers_contents.contains(&format!("{} service restart *", binary.display())));
+    assert!(sudoers_contents.contains(&format!("{} notify *", binary.display())));
     assert!(sudoers_contents.contains(&format!("{} policy check *", binary.display())));
     assert!(sudoers_contents.contains(&format!("{} policy explain", binary.display())));
     assert!(sudoers_contents.contains(&format!("{} policy explain *", binary.display())));
@@ -597,3 +727,18 @@ fn write_recorder(dir: &Path, name: &str) -> PathBuf {
 
 const SAMPLE_POLICY: &str = include_str!("../resources/examples/policy/systemd.example.toml");
 const OPENRC_POLICY: &str = include_str!("../resources/examples/policy/openrc.example.toml");
+const TELEGRAM_NOTIFY_POLICY: &str = r#"
+version = 1
+
+[defaults]
+backend = "systemd"
+max_log_lines = 1000
+
+[channels.telegram_myriad]
+type = "telegram"
+chat_id = "123456789"
+bot_token_env = "OPS_RUNBOOK_TEST_TELEGRAM_TOKEN"
+
+[callers.hermes]
+notify = ["telegram_myriad"]
+"#;

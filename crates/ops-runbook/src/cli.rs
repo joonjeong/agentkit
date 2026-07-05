@@ -8,6 +8,7 @@ use crate::audit;
 use crate::bootstrap::{self, BootstrapArgs};
 use crate::config::{configured_policy_path, Backend, Config};
 use crate::error::{Error, Result};
+use crate::notification::{self, Notification, Severity};
 use crate::policy::{is_allowed, validate_target, Action};
 use crate::runner;
 
@@ -31,6 +32,8 @@ enum Command {
     Service(ServiceCommand),
     /// Show allowlisted service logs.
     Logs(LogsArgs),
+    /// Send an allowlisted notification.
+    Notify(NotifyArgs),
     /// Validate or inspect policy.
     Policy(PolicyCommand),
     /// Print the ops-runbook version.
@@ -67,6 +70,24 @@ struct LogsArgs {
     service: String,
     #[arg(long, default_value_t = DEFAULT_LOG_LINES)]
     lines: u32,
+}
+
+#[derive(Debug, Args)]
+struct NotifyArgs {
+    /// Notification channel name from policy channels.
+    channel: String,
+
+    /// Notification severity.
+    #[arg(long, value_enum, default_value_t = Severity::Info)]
+    severity: Severity,
+
+    /// Optional short notification title.
+    #[arg(long)]
+    title: Option<String>,
+
+    /// Notification message body.
+    #[arg(long)]
+    message: String,
 }
 
 #[derive(Debug, Args)]
@@ -140,6 +161,7 @@ where
             }
         },
         Command::Logs(args) => execute(Action::Logs, &args.service, Some(args.lines), &policy_path),
+        Command::Notify(args) => notify(args, &policy_path),
         Command::Policy(command) => match command.command {
             PolicySubcommand::Check(args) => {
                 check_policy(args.policy_path.as_deref().unwrap_or(&policy_path))
@@ -208,6 +230,7 @@ fn explain_policy(policy_path: &Path) -> Result<i32> {
             "    service_read: {}",
             format_string_list(&caller_policy.service_read)
         );
+        println!("    notify: {}", format_string_list(&caller_policy.notify));
         println!("    commands:");
         for service in &caller_policy.service_control {
             println!("      service start {service}");
@@ -220,6 +243,9 @@ fn explain_policy(policy_path: &Path) -> Result<i32> {
             if config.backend() == crate::config::Backend::Systemd {
                 println!("      logs {service}");
             }
+        }
+        for channel in &caller_policy.notify {
+            println!("      notify {channel}");
         }
     }
 
@@ -252,6 +278,77 @@ fn template_policy(args: PolicyTemplateArgs) -> Result<i32> {
         path: output,
         source,
     })?;
+    Ok(0)
+}
+
+fn notify(args: NotifyArgs, policy_path: &Path) -> Result<i32> {
+    validate_target(&args.channel)?;
+    notification::validate_message_text(args.title.as_deref(), &args.message)?;
+
+    let caller = caller_from_sudo()?;
+    let config = load_valid_config(policy_path)?;
+    let audit_path = audit::configured_audit_log_path();
+    let Some(caller_policy) = config.callers.get(&caller) else {
+        audit::write(
+            &audit_path,
+            &caller,
+            Action::Notify.as_str(),
+            &args.channel,
+            "deny",
+            Some("caller_not_allowed"),
+        )?;
+        return Err(Error::CallerNotAllowed(caller));
+    };
+
+    if !is_allowed(caller_policy, Action::Notify, &args.channel) {
+        audit::write(
+            &audit_path,
+            &caller,
+            Action::Notify.as_str(),
+            &args.channel,
+            "deny",
+            Some("channel_not_allowed"),
+        )?;
+        return Err(Error::NotificationChannelNotAllowed(args.channel));
+    }
+
+    let Some(channel) = config.notification_channel(&args.channel) else {
+        audit::write(
+            &audit_path,
+            &caller,
+            Action::Notify.as_str(),
+            &args.channel,
+            "deny",
+            Some("channel_not_found"),
+        )?;
+        return Err(Error::NotificationChannelNotFound(args.channel));
+    };
+
+    audit::write(
+        &audit_path,
+        &caller,
+        Action::Notify.as_str(),
+        &args.channel,
+        "allow",
+        None,
+    )?;
+    let notification = Notification {
+        caller: &caller,
+        channel: &args.channel,
+        severity: args.severity,
+        title: args.title.as_deref(),
+        message: &args.message,
+    };
+    notification::send(channel, &notification)?;
+    audit::write(
+        &audit_path,
+        &caller,
+        Action::Notify.as_str(),
+        &args.channel,
+        "executed",
+        Some("sent"),
+    )?;
+
     Ok(0)
 }
 
@@ -327,6 +424,11 @@ fn execute(
         Action::ServiceReload => runner::service(config.backend(), "reload", target),
         Action::ServiceStatus => runner::service(config.backend(), "status", target),
         Action::Logs => runner::logs(config.backend(), target, lines),
+        Action::Notify => {
+            return Err(Error::InvalidPolicyOption(
+                "notify must use notify command".to_owned(),
+            ))
+        }
     }?;
 
     let outcome = format!("exit_code={exit_code}");

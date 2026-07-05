@@ -3,6 +3,7 @@ mod bootstrap;
 mod cli;
 mod config;
 mod error;
+mod notification;
 mod policy;
 mod runner;
 

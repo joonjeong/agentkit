@@ -8,6 +8,7 @@ pub enum Action {
     ServiceRestart,
     ServiceReload,
     ServiceStatus,
+    Notify,
     Logs,
 }
 
@@ -19,6 +20,7 @@ impl Action {
             Self::ServiceRestart => "service_restart",
             Self::ServiceReload => "service_reload",
             Self::ServiceStatus => "service_status",
+            Self::Notify => "notify",
             Self::Logs => "logs",
         }
     }
@@ -55,6 +57,7 @@ pub fn allowed_targets(policy: &CallerPolicy, action: Action) -> &[String] {
         | Action::ServiceRestart
         | Action::ServiceReload => &policy.service_control,
         Action::ServiceStatus | Action::Logs => &policy.service_read,
+        Action::Notify => &policy.notify,
     }
 }
 
