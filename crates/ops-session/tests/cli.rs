@@ -87,7 +87,33 @@ fn ops_session_symlink_style_help_does_not_duplicate_subcommand_name() {
 }
 
 #[test]
-fn github_app_config_check_reads_default_user_config_path() {
+fn github_app_config_check_reads_config_path_env() {
+    let mut cmd = Command::cargo_bin("ops-session").expect("binary exists");
+    let config_dir = unique_temp_dir("ops-session-config-env-test");
+    fs::create_dir_all(&config_dir).expect("config dir created");
+    let private_key_path = config_dir.join("private-key.pem");
+    fs::write(&private_key_path, TEST_RSA_PRIVATE_KEY).expect("private key written");
+    let config_path = config_dir.join("config.toml");
+    fs::write(
+        &config_path,
+        format!(
+            "[github_app]\napp_id = 1\ndefault_profile = \"default\"\n\n[github_app.profiles.default]\nrepos = [\"OWNER/REPO\"]\n\n[github_app.profiles.default.private_key]\ntype = \"file\"\npath = \"{}\"\n",
+            private_key_path.to_string_lossy()
+        ),
+    )
+    .expect("config written");
+
+    cmd.args(["github-app", "config", "check"])
+        .env("OPS_SESSION_GITHUB_CONFIG_PATH", &config_path)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("config OK"));
+
+    fs::remove_dir_all(config_dir).expect("config dir removed");
+}
+
+#[test]
+fn github_app_config_check_reads_default_user_config_path_before_system_path() {
     let mut cmd = Command::cargo_bin("ops-session").expect("binary exists");
     let config_home = unique_temp_dir("ops-session-config-home-test");
     let ops_session_config_dir = config_home.join("ops-session");
@@ -97,7 +123,7 @@ fn github_app_config_check_reads_default_user_config_path() {
     fs::write(
         ops_session_config_dir.join("config.toml"),
         format!(
-            "[github_app]\napp_id = 1\nprivate_key_path = \"{}\"\ndefault_profile = \"default\"\n\n[github_app.profiles.default]\nrepos = [\"OWNER/REPO\"]\n",
+            "[github_app]\napp_id = 1\ndefault_profile = \"default\"\n\n[github_app.profiles.default]\nrepos = [\"OWNER/REPO\"]\n\n[github_app.profiles.default.private_key]\ntype = \"file\"\npath = \"{}\"\n",
             private_key_path.to_string_lossy()
         ),
     )
@@ -114,7 +140,7 @@ fn github_app_config_check_reads_default_user_config_path() {
 }
 
 #[test]
-fn github_app_config_example_prints_user_level_config() {
+fn github_app_config_example_prints_system_level_config() {
     let config_home = unique_temp_dir("ops-session-config-example-test");
     let mut cmd = Command::cargo_bin("ops-session").expect("binary exists");
 
@@ -124,9 +150,11 @@ fn github_app_config_example_prints_user_level_config() {
         .success()
         .stdout(
             predicate::str::contains("app_id = 123456")
-                .and(predicate::str::contains("private_key_path = "))
                 .and(predicate::str::contains(
-                    "/home/me/.config/ops-session/github-app.private-key.pem",
+                    "[github_app.profiles.codex-review.private_key]",
+                ))
+                .and(predicate::str::contains(
+                    "/etc/ops-session/secrets/codex-review-github-app.private-key.pem",
                 ))
                 .and(predicate::str::contains(
                     "[github_app.profiles.codex-review.permissions]",
@@ -168,7 +196,8 @@ fn github_app_config_check_accepts_valid_config() {
     fs::write(
         &config_path,
         format!(
-            "[github_app]\napp_id = 1\nprivate_key_path = \"{}\"\ndefault_profile = \"read\"\n\n[github_app.profiles.read]\nrepos = [\"OWNER/REPO\"]\n\n[github_app.profiles.read.permissions]\ncontents = \"read\"\n\n[github_app.profiles.write]\nrepos = [\"OWNER/OTHER\"]\n\n[github_app.profiles.write.permissions]\ncontents = \"write\"\n",
+            "[github_app]\napp_id = 1\ndefault_profile = \"read\"\n\n[github_app.profiles.read]\nrepos = [\"OWNER/REPO\"]\n\n[github_app.profiles.read.private_key]\ntype = \"file\"\npath = \"{}\"\n\n[github_app.profiles.read.permissions]\ncontents = \"read\"\n\n[github_app.profiles.write]\nrepos = [\"OWNER/OTHER\"]\n\n[github_app.profiles.write.private_key]\ntype = \"file\"\npath = \"{}\"\n\n[github_app.profiles.write.permissions]\ncontents = \"write\"\n",
+            private_key_path.to_string_lossy(),
             private_key_path.to_string_lossy()
         ),
     )
@@ -200,7 +229,7 @@ fn github_app_config_check_allows_other_provider_sections() {
     fs::write(
         &config_path,
         format!(
-            "[github_app]\napp_id = 1\nprivate_key_path = \"{}\"\ndefault_profile = \"read\"\n\n[github_app.profiles.read]\nrepos = [\"OWNER/REPO\"]\n\n[other_provider]\nenabled = true\n",
+            "[github_app]\napp_id = 1\ndefault_profile = \"read\"\n\n[github_app.profiles.read]\nrepos = [\"OWNER/REPO\"]\n\n[github_app.profiles.read.private_key]\ntype = \"file\"\npath = \"{}\"\n\n[other_provider]\nenabled = true\n",
             private_key_path.to_string_lossy()
         ),
     )
@@ -226,7 +255,7 @@ fn github_app_config_check_rejects_invalid_repo_scope() {
     fs::write(
         &config_path,
         format!(
-            "[github_app]\napp_id = 1\nprivate_key_path = \"{}\"\n\n[github_app.profiles.bad]\nrepos = [\"OWNER/REPO/EXTRA\"]\n",
+            "[github_app]\napp_id = 1\n\n[github_app.profiles.bad]\nrepos = [\"OWNER/REPO/EXTRA\"]\n\n[github_app.profiles.bad.private_key]\ntype = \"file\"\npath = \"{}\"\n",
             private_key_path.to_string_lossy()
         ),
     )
@@ -381,7 +410,8 @@ fn ops_session_uses_named_config_profile() {
     fs::write(
         &config_path,
         format!(
-            "[github_app]\napp_id = 1\ninstallation_id = 42\nprivate_key_path = \"{}\"\n\n[github_app.profiles.read]\nrepos = [\"OWNER/REPO\"]\n\n[github_app.profiles.read.permissions]\ncontents = \"read\"\n\n[github_app.profiles.write]\nrepos = [\"OWNER/OTHER\"]\n\n[github_app.profiles.write.permissions]\ncontents = \"write\"\n",
+            "[github_app]\napp_id = 1\ninstallation_id = 42\n\n[github_app.profiles.read]\nrepos = [\"OWNER/REPO\"]\n\n[github_app.profiles.read.private_key]\ntype = \"file\"\npath = \"{}\"\n\n[github_app.profiles.read.permissions]\ncontents = \"read\"\n\n[github_app.profiles.write]\nrepos = [\"OWNER/OTHER\"]\n\n[github_app.profiles.write.private_key]\ntype = \"file\"\npath = \"{}\"\n\n[github_app.profiles.write.permissions]\ncontents = \"write\"\n",
+            private_key_path.to_string_lossy(),
             private_key_path.to_string_lossy()
         ),
     )
@@ -408,6 +438,97 @@ fn ops_session_uses_named_config_profile() {
     let request = server.join().expect("server thread completed");
     assert!(request.contains(r#""repositories":["other"]"#));
     assert!(request.contains(r#""permissions":{"contents":"write"}"#));
+    fs::remove_dir_all(config_dir).expect("config dir removed");
+}
+
+#[cfg(unix)]
+#[test]
+fn ops_session_uses_private_key_from_selected_auth_profile() {
+    let (api_url, server) = one_token_response_server();
+    let config_dir = unique_temp_dir("ops-session-config-app-profile-test");
+    fs::create_dir(&config_dir).expect("config dir created");
+    let private_key_path = config_dir.join("private-key.pem");
+    fs::write(&private_key_path, TEST_RSA_PRIVATE_KEY).expect("private key written");
+    let config_path = config_dir.join("config.toml");
+    fs::write(
+        &config_path,
+        format!(
+            "[github_app]\napp_id = 1\ninstallation_id = 42\n\n[github_app.profiles.read]\nrepos = [\"OWNER/REPO\"]\n\n[github_app.profiles.read.private_key]\ntype = \"file\"\npath = \"/not/a/key.pem\"\n\n[github_app.profiles.read.permissions]\ncontents = \"read\"\n\n[github_app.profiles.write]\nrepos = [\"OWNER/OTHER\"]\n\n[github_app.profiles.write.private_key]\ntype = \"file\"\npath = \"{}\"\n\n[github_app.profiles.write.permissions]\ncontents = \"write\"\n",
+            private_key_path.to_string_lossy()
+        ),
+    )
+    .expect("config written");
+    let mut cmd = Command::cargo_bin("ops-session").expect("binary exists");
+
+    cmd.args([
+        "github-app",
+        "run",
+        "--config-path",
+        config_path.to_str().expect("utf-8 config path"),
+        "--profile",
+        "write",
+        "--api-url",
+        &api_url,
+        "--",
+        "sh",
+        "-c",
+        "test \"$GH_TOKEN\" = test-token",
+    ])
+    .assert()
+    .success();
+
+    let request = server.join().expect("server thread completed");
+    assert!(request.contains(r#""repositories":["other"]"#));
+    assert!(request.contains(r#""permissions":{"contents":"write"}"#));
+    fs::remove_dir_all(config_dir).expect("config dir removed");
+}
+
+#[cfg(unix)]
+#[test]
+fn ops_session_reads_private_key_from_command_stdout() {
+    let (api_url, server) = one_token_response_server();
+    let config_dir = unique_temp_dir("ops-session-config-command-key-test");
+    fs::create_dir(&config_dir).expect("config dir created");
+    let key_command_path = config_dir.join("print-key.sh");
+    fs::write(
+        &key_command_path,
+        format!("#!/bin/sh\ncat <<'EOF'\n{}EOF\n", TEST_RSA_PRIVATE_KEY),
+    )
+    .expect("private key command written");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&key_command_path, fs::Permissions::from_mode(0o700))
+            .expect("private key command executable");
+    }
+    let config_path = config_dir.join("config.toml");
+    fs::write(
+        &config_path,
+        format!(
+            "[github_app]\napp_id = 1\ninstallation_id = 42\n\n[github_app.profiles.default]\nrepos = [\"OWNER/REPO\"]\n\n[github_app.profiles.default.private_key]\ntype = \"command\"\ncommand = \"{}\"\nargs = []\n\n[github_app.profiles.default.permissions]\ncontents = \"read\"\n",
+            key_command_path.to_string_lossy()
+        ),
+    )
+    .expect("config written");
+    let mut cmd = Command::cargo_bin("ops-session").expect("binary exists");
+
+    cmd.args([
+        "github-app",
+        "run",
+        "--config-path",
+        config_path.to_str().expect("utf-8 config path"),
+        "--api-url",
+        &api_url,
+        "--",
+        "sh",
+        "-c",
+        "test \"$GH_TOKEN\" = test-token",
+    ])
+    .assert()
+    .success();
+
+    let request = server.join().expect("server thread completed");
+    assert!(request.starts_with("post /app/installations/42/access_tokens "));
     fs::remove_dir_all(config_dir).expect("config dir removed");
 }
 
@@ -602,7 +723,7 @@ fn ops_session_accepts_command_options_after_separator() {
     let config_path = config_dir.join("config.toml");
     fs::write(
         &config_path,
-        "[github_app]\nprivate_key_path = \"/not/a/key.pem\"\n",
+        "[github_app]\n\n[github_app.profiles.default]\nrepos = [\"OWNER/REPO\"]\n\n[github_app.profiles.default.private_key]\ntype = \"file\"\npath = \"/not/a/key.pem\"\n",
     )
     .expect("config written");
 
@@ -727,7 +848,7 @@ fn write_github_config(prefix: &str) -> (std::path::PathBuf, std::path::PathBuf)
     fs::write(
         &config_path,
         format!(
-            "[github_app]\nprivate_key_path = \"{}\"\ndefault_profile = \"default\"\n\n[github_app.profiles.default]\nrepos = [\"OWNER/REPO\"]\n\n[github_app.profiles.default.permissions]\ncontents = \"read\"\n",
+            "[github_app]\ndefault_profile = \"default\"\n\n[github_app.profiles.default]\nrepos = [\"OWNER/REPO\"]\n\n[github_app.profiles.default.private_key]\ntype = \"file\"\npath = \"{}\"\n\n[github_app.profiles.default.permissions]\ncontents = \"read\"\n",
             private_key_path.to_string_lossy()
         ),
     )

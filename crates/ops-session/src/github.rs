@@ -25,6 +25,7 @@ const OPS_SESSION_WORKFLOW_SKILL: &str =
 const GITHUB_APP_CONFIG_EXAMPLE: &str =
     include_str!("../resources/examples/github-app/config.example.toml");
 const TOKEN_CACHE_EXPIRY_GRACE_SECONDS: i64 = 60;
+const DEFAULT_GITHUB_CONFIG_PATH: &str = "/etc/ops-session/config.toml";
 
 #[derive(Debug, Args)]
 #[command(
@@ -84,8 +85,7 @@ Git HTTPS authentication:
 pub struct GithubSessionArgs {
     /// Path to the GitHub provider config file.
     ///
-    /// Defaults to $XDG_CONFIG_HOME/ops-session/config.toml, or
-    /// ~/.config/ops-session/config.toml when XDG_CONFIG_HOME is unset.
+    /// Defaults to the user config path, then /etc/ops-session/config.toml.
     #[arg(long, env = "OPS_SESSION_GITHUB_CONFIG_PATH")]
     config_path: Option<PathBuf>,
 
@@ -177,8 +177,7 @@ enum GithubAuthConfigSubcommand {
 struct GithubAuthConfigCheckArgs {
     /// Path to the GitHub App auth config file.
     ///
-    /// Defaults to $XDG_CONFIG_HOME/ops-session/config.toml, or
-    /// ~/.config/ops-session/config.toml when XDG_CONFIG_HOME is unset.
+    /// Defaults to the user config path, then /etc/ops-session/config.toml.
     #[arg(long, env = "OPS_SESSION_GITHUB_CONFIG_PATH")]
     config_path: Option<PathBuf>,
 }
@@ -278,17 +277,43 @@ struct OpsSessionConfigFile {
 struct GithubConfigFile {
     app_id: Option<u64>,
     installation_id: Option<u64>,
-    private_key_path: Option<PathBuf>,
     api_url: Option<String>,
     default_profile: Option<String>,
     #[serde(default)]
     profiles: BTreeMap<String, GithubConfigProfile>,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+#[serde(tag = "type", rename_all = "lowercase", deny_unknown_fields)]
+enum PrivateKeySource {
+    File {
+        path: PathBuf,
+    },
+    Command {
+        command: PathBuf,
+        #[serde(default)]
+        args: Vec<String>,
+    },
+}
+
+impl PrivateKeySource {
+    fn describe(&self) -> String {
+        match self {
+            Self::File { path } => format!("file:{}", path.display()),
+            Self::Command { command, args } => {
+                format!("command:{} {}", command.display(), args.join(" "))
+            }
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct GithubConfigProfile {
+    app_id: Option<u64>,
     installation_id: Option<u64>,
+    api_url: Option<String>,
+    private_key: PrivateKeySource,
     #[serde(default)]
     repos: Vec<String>,
     #[serde(default)]
@@ -301,7 +326,7 @@ struct ResolvedGithubConfig {
     profile_name: Option<String>,
     app_id: u64,
     installation_id: Option<u64>,
-    private_key_path: PathBuf,
+    private_key: PrivateKeySource,
     api_url: String,
     repos: Vec<String>,
     permissions: Vec<PermissionArg>,
@@ -310,7 +335,7 @@ struct ResolvedGithubConfig {
 trait AppTokenConfig {
     fn app_id(&self) -> u64;
     fn installation_id(&self) -> Option<u64>;
-    fn private_key_path(&self) -> Option<&PathBuf>;
+    fn private_key(&self) -> &PrivateKeySource;
     fn api_url(&self) -> &str;
     fn repos(&self) -> &[String];
     fn permissions(&self) -> &[PermissionArg];
@@ -367,8 +392,8 @@ impl AppTokenConfig for ResolvedGithubConfig {
         self.installation_id
     }
 
-    fn private_key_path(&self) -> Option<&PathBuf> {
-        Some(&self.private_key_path)
+    fn private_key(&self) -> &PrivateKeySource {
+        &self.private_key
     }
 
     fn api_url(&self) -> &str {
@@ -428,16 +453,12 @@ fn check_github_auth_config(args: GithubAuthConfigCheckArgs) -> Result<()> {
     validate_github_config_file(&file, &config_path)?;
 
     println!("config OK: {}", config_path.display());
-    println!("app_id: {}", file.app_id.expect("validated app_id"));
+    if let Some(app_id) = file.app_id {
+        println!("app_id: {app_id}");
+    }
     if let Some(installation_id) = file.installation_id {
         println!("installation_id: {installation_id}");
     }
-    println!(
-        "private_key_path: {}",
-        file.private_key_path
-            .expect("validated private_key_path")
-            .display()
-    );
     println!(
         "api_url: {}",
         file.api_url
@@ -449,9 +470,16 @@ fn check_github_auth_config(args: GithubAuthConfigCheckArgs) -> Result<()> {
     println!("profiles:");
     for (name, profile) in file.profiles {
         println!("  {name}:");
+        if let Some(app_id) = profile.app_id {
+            println!("    app_id: {app_id}");
+        }
         if let Some(installation_id) = profile.installation_id {
             println!("    installation_id: {installation_id}");
         }
+        if let Some(api_url) = profile.api_url {
+            println!("    api_url: {api_url}");
+        }
+        println!("    private_key: {}", profile.private_key.describe());
         println!("    repos: {}", format_string_list(&profile.repos));
         println!(
             "    permissions: {}",
@@ -498,54 +526,73 @@ pub fn create_app_agent_workflow_skill(args: AppAgentWorkflowSkillArgs) -> Resul
 }
 
 fn read_private_key(args: &impl AppTokenConfig) -> Result<String> {
-    let path = args
-        .private_key_path()
-        .ok_or_else(|| anyhow!("missing private_key_path in GitHub config file"))?;
-    fs::read_to_string(path)
-        .with_context(|| format!("failed to read private key from {}", path.display()))
+    match args.private_key() {
+        PrivateKeySource::File { path } => fs::read_to_string(path)
+            .with_context(|| format!("failed to read private key from {}", path.display())),
+        PrivateKeySource::Command { command, args } => {
+            let output = Command::new(command).args(args).output().with_context(|| {
+                format!("failed to run private key command {}", command.display())
+            })?;
+            if !output.status.success() {
+                return Err(anyhow!(
+                    "private key command {} exited with {}",
+                    command.display(),
+                    output.status
+                ));
+            }
+            String::from_utf8(output.stdout).with_context(|| {
+                format!(
+                    "private key command {} returned non-UTF-8 stdout",
+                    command.display()
+                )
+            })
+        }
+    }
 }
 
 fn resolve_github_config(args: &impl GithubConfigArgs) -> Result<ResolvedGithubConfig> {
     let config_path = github_config_path(args.config_path())?;
     let file = read_github_config(&config_path)?;
     let selected_profile = select_github_config_profile(&file, args, &config_path)?;
+    let (profile_name, profile) = selected_profile.ok_or_else(|| {
+        anyhow!(
+            "missing GitHub auth config profile in {}; configure [github_app.profiles.<profile>]",
+            config_path.display()
+        )
+    })?;
     let permissions = if args.permissions().is_empty() {
-        selected_profile
-            .map(|(_, profile)| permission_args_from_map(profile.permissions.clone()))
-            .unwrap_or_default()
+        permission_args_from_map(profile.permissions.clone())
     } else {
         args.permissions().to_vec()
     };
     let repos = if args.repos().is_empty() {
-        selected_profile
-            .map(|(_, profile)| profile.repos.clone())
-            .unwrap_or_default()
+        profile.repos.clone()
     } else {
         args.repos().to_vec()
     };
 
     Ok(ResolvedGithubConfig {
         config_path: config_path.clone(),
-        profile_name: selected_profile.map(|(name, _)| name.to_string()),
-        app_id: args.app_id().or(file.app_id).ok_or_else(|| {
-            anyhow!(
-                "missing GitHub App ID; set --app-id, GITHUB_APP_ID, or app_id in {}",
-                config_path.display()
-            )
-        })?,
+        profile_name: Some(profile_name.to_string()),
+        app_id: args
+            .app_id()
+            .or(profile.app_id)
+            .or(file.app_id)
+            .ok_or_else(|| {
+                anyhow!(
+                    "missing GitHub App ID; set --app-id, GITHUB_APP_ID, or app_id in {}",
+                    config_path.display()
+                )
+            })?,
         installation_id: args
             .installation_id()
-            .or_else(|| selected_profile.and_then(|(_, profile)| profile.installation_id))
+            .or(profile.installation_id)
             .or(file.installation_id),
-        private_key_path: file.private_key_path.ok_or_else(|| {
-            anyhow!(
-                "missing private_key_path in GitHub config file {}",
-                config_path.display()
-            )
-        })?,
+        private_key: profile.private_key.clone(),
         api_url: args
             .api_url()
             .map(str::to_string)
+            .or_else(|| profile.api_url.clone())
             .or(file.api_url)
             .unwrap_or_else(|| "https://api.github.com".to_string()),
         repos,
@@ -606,20 +653,29 @@ fn github_config_path(path: Option<&PathBuf>) -> Result<PathBuf> {
     if let Some(path) = path {
         return Ok(path.clone());
     }
-    if let Some(config_home) = env::var_os("XDG_CONFIG_HOME") {
-        return Ok(PathBuf::from(config_home)
-            .join("ops-session")
-            .join("config.toml"));
+    let system_path = PathBuf::from(DEFAULT_GITHUB_CONFIG_PATH);
+    if let Some(user_path) = user_github_config_path() {
+        if user_path.exists() {
+            return Ok(user_path);
+        }
     }
-    if let Some(home) = env::var_os("HOME") {
-        return Ok(PathBuf::from(home)
+    Ok(system_path)
+}
+
+fn user_github_config_path() -> Option<PathBuf> {
+    if let Some(config_home) = env::var_os("XDG_CONFIG_HOME") {
+        return Some(
+            PathBuf::from(config_home)
+                .join("ops-session")
+                .join("config.toml"),
+        );
+    }
+    env::var_os("HOME").map(|home| {
+        PathBuf::from(home)
             .join(".config")
             .join("ops-session")
-            .join("config.toml"));
-    }
-    Err(anyhow!(
-        "cannot determine GitHub config path; set --config-path, OPS_SESSION_GITHUB_CONFIG_PATH, XDG_CONFIG_HOME, or HOME"
-    ))
+            .join("config.toml")
+    })
 }
 
 fn read_github_config(path: &PathBuf) -> Result<GithubConfigFile> {
@@ -652,35 +708,8 @@ fn parse_github_config(contents: &str, path: &Path) -> Result<GithubConfigFile> 
 }
 
 fn validate_github_config_file(file: &GithubConfigFile, path: &Path) -> Result<()> {
-    if file.app_id.is_none() {
-        return Err(anyhow!(
-            "missing app_id in GitHub config file {}",
-            path.display()
-        ));
-    }
-
-    let private_key_path = file.private_key_path.as_ref().ok_or_else(|| {
-        anyhow!(
-            "missing private_key_path in GitHub config file {}",
-            path.display()
-        )
-    })?;
-    if !private_key_path.is_absolute() {
-        return Err(anyhow!(
-            "private_key_path must be absolute in GitHub config file {}",
-            path.display()
-        ));
-    }
-
     if let Some(api_url) = &file.api_url {
-        let parsed = Url::parse(api_url)
-            .with_context(|| format!("invalid api_url in GitHub config file {}", path.display()))?;
-        if parsed.host_str().is_none() {
-            return Err(anyhow!(
-                "api_url must include a host in GitHub config file {}",
-                path.display()
-            ));
-        }
+        validate_api_url(api_url, path)?;
     }
 
     if file.profiles.is_empty() {
@@ -701,6 +730,24 @@ fn validate_github_config_file(file: &GithubConfigFile, path: &Path) -> Result<(
         if profile.repos.is_empty() {
             return Err(anyhow!(
                 "profile {:?} must include at least one repo in GitHub config file {}",
+                name,
+                path.display()
+            ));
+        }
+
+        if let Some(api_url) = &profile.api_url {
+            validate_api_url(api_url, path)?;
+        }
+
+        validate_private_key_source(
+            &format!("github_app.profiles.{name}.private_key"),
+            &profile.private_key,
+            path,
+        )?;
+
+        if file.app_id.is_none() && profile.app_id.is_none() {
+            return Err(anyhow!(
+                "profile {:?} must resolve a GitHub App ID from app_id or profile app_id in GitHub config file {}",
                 name,
                 path.display()
             ));
@@ -733,6 +780,49 @@ fn validate_github_config_file(file: &GithubConfigFile, path: &Path) -> Result<(
         }
     }
 
+    Ok(())
+}
+
+fn validate_api_url(api_url: &str, path: &Path) -> Result<()> {
+    let parsed = Url::parse(api_url)
+        .with_context(|| format!("invalid api_url in GitHub config file {}", path.display()))?;
+    if parsed.host_str().is_none() {
+        return Err(anyhow!(
+            "api_url must include a host in GitHub config file {}",
+            path.display()
+        ));
+    }
+    Ok(())
+}
+
+fn validate_private_key_source(name: &str, source: &PrivateKeySource, path: &Path) -> Result<()> {
+    match source {
+        PrivateKeySource::File { path: key_path } => {
+            validate_private_key_file_path(&format!("{name}.path"), key_path, path)
+        }
+        PrivateKeySource::Command { command, .. } => {
+            validate_private_key_command(&format!("{name}.command"), command, path)
+        }
+    }
+}
+
+fn validate_private_key_command(name: &str, command: &Path, path: &Path) -> Result<()> {
+    if !command.is_absolute() {
+        return Err(anyhow!(
+            "{name} must be absolute in GitHub config file {}",
+            path.display()
+        ));
+    }
+    Ok(())
+}
+
+fn validate_private_key_file_path(name: &str, key_path: &Path, path: &Path) -> Result<()> {
+    if !key_path.is_absolute() {
+        return Err(anyhow!(
+            "{name} must be absolute in GitHub config file {}",
+            path.display()
+        ));
+    }
     Ok(())
 }
 
@@ -1307,7 +1397,7 @@ impl std::str::FromStr for PermissionArg {
 mod tests {
     use super::{
         git_credential_host, permissions_map, repository_names, token_cache_key, PermissionArg,
-        ResolvedGithubConfig,
+        PrivateKeySource, ResolvedGithubConfig,
     };
     use std::path::PathBuf;
 
@@ -1385,7 +1475,9 @@ mod tests {
             profile_name: Some("default".to_string()),
             app_id: 1,
             installation_id: Some(2),
-            private_key_path: PathBuf::from("private-key.pem"),
+            private_key: PrivateKeySource::File {
+                path: PathBuf::from("/tmp/private-key.pem"),
+            },
             api_url: "https://api.github.com".to_string(),
             repos: vec!["acme/service".to_string()],
             permissions: Vec::new(),

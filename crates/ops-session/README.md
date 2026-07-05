@@ -5,27 +5,31 @@ current provider is GitHub App authentication:
 
 ```sh
 ops-session github-app run \
-  --app-id "$GITHUB_APP_ID" \
-  --repo OWNER/REPO \
+  --profile codex-review \
   -- git remote update
 ```
 
-GitHub credentials are read from a config file. The default path is
+GitHub credentials are read from a config file. Runs read
 `$XDG_CONFIG_HOME/ops-session/config.toml`, or
-`~/.config/ops-session/config.toml` when `XDG_CONFIG_HOME` is unset. Override it
-with `--config-path` or `OPS_SESSION_GITHUB_CONFIG_PATH`.
+`~/.config/ops-session/config.toml` when `XDG_CONFIG_HOME` is unset, before
+using the system config at `/etc/ops-session/config.toml`. Override it with
+`--config-path` or `OPS_SESSION_GITHUB_CONFIG_PATH` for local checks and
+development runs.
 The top level of this file may contain multiple provider sections; GitHub App
 settings live under `[github_app]`.
 
 ```toml
 [github_app]
 app_id = 123456
-private_key_path = "/home/me/.config/ops-session/github-app.private-key.pem"
 api_url = "https://api.github.com"
 default_profile = "codex-review"
 
 [github_app.profiles.codex-review]
 repos = ["OWNER/REPO"]
+
+[github_app.profiles.codex-review.private_key]
+type = "file"
+path = "/etc/ops-session/secrets/codex-review-github-app.private-key.pem"
 
 [github_app.profiles.codex-review.permissions]
 contents = "read"
@@ -34,23 +38,38 @@ pull_requests = "read"
 [github_app.profiles.codex-maintainer]
 repos = ["OWNER/REPO"]
 
+[github_app.profiles.codex-maintainer.private_key]
+type = "command"
+command = "/usr/bin/op"
+args = ["read", "op://ops/github-apps/codex-maintainer/private-key"]
+
 [github_app.profiles.codex-maintainer.permissions]
 contents = "write"
 pull_requests = "write"
 ```
 
-`app_id`, `installation_id`, `api_url`, `default_profile`, and `profiles` are
+`app_id`, `installation_id`, `api_url`, `default_profile`, and auth profiles are
 set under `[github_app]`. Profiles are map entries keyed by profile name, so
-`[github_app.profiles.codex-review]` defines the `codex-review` profile. On a
-node that runs multiple agents, give each agent a distinct profile and set
-`OPS_SESSION_GITHUB_PROFILE` in that agent's service environment. Each profile
-owns its `repos`, optional `installation_id`, and `permissions`, so agents can
-share the same GitHub App credentials without sharing repository scope or token
-permissions. `--profile`, `OPS_SESSION_GITHUB_PROFILE`, `--app-id`,
-`GITHUB_APP_ID`, `--installation-id`, `GITHUB_APP_INSTALLATION_ID`, `--api-url`,
-`GITHUB_API_URL`, `--repo`, and `--permission` override non-secret config
-values. The private key path is only read from `github_app.private_key_path` in
-the config file; use an absolute path.
+`[github_app.profiles.codex-review]` defines the `codex-review` auth profile.
+On a node that runs multiple agents, give each agent a distinct auth profile and
+set `OPS_SESSION_GITHUB_PROFILE` in that agent's service environment. Each auth
+profile owns its private key source, `repos`, optional `installation_id`,
+and `permissions`.
+
+For a simple local secret store, keep private keys in files readable by the
+agent users' group, for example:
+
+```sh
+sudo chown root:ops-agent /etc/ops-session/secrets/codex-review-github-app.private-key.pem
+sudo chmod 0640 /etc/ops-session/secrets/codex-review-github-app.private-key.pem
+```
+
+`--profile`, `OPS_SESSION_GITHUB_PROFILE`, `--app-id`, `GITHUB_APP_ID`, `--installation-id`,
+`GITHUB_APP_INSTALLATION_ID`, `--api-url`, `GITHUB_API_URL`, `--repo`, and
+`--permission` can override non-secret config values. Private keys are read
+from `[github_app.profiles.<profile>.private_key]`. `type = "file"` paths and
+`type = "command"` commands must be absolute. Command sources are executed
+without a shell and use stdout as the private key.
 Unknown top-level provider sections are ignored by the GitHub App commands, but
 unknown fields inside `[github_app]` are rejected so GitHub configuration typos
 fail fast.
@@ -61,15 +80,13 @@ injected as both `GH_TOKEN` and `GITHUB_TOKEN`.
 
 Useful options:
 
-- `--repo OWNER/REPO` scopes the token to a repository. Repeat `--repo` for
-  multiple repositories.
 - `--profile NAME` selects a named config profile. Prefer
   `OPS_SESSION_GITHUB_PROFILE` for long-running agent services.
-- `--permission key=value` limits token permissions, for example
-  `--permission contents=read`.
 - `--git-credentials` configures a child-only Git credential helper for HTTPS
   GitHub remotes.
 - `--token-cache` opts into reusing a valid cached installation token.
+- `--repo OWNER/REPO` and `--permission key=value` can override profile
+  repository and permission scope.
 
 Token caching is disabled by default. When enabled, cache keys include the config
 path, selected profile, app, installation, API URL, repository list, and

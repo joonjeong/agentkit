@@ -32,18 +32,22 @@ ops-session github-app run \
   -- git remote update
 ```
 
-GitHub App credential material is read from the user-level config file
+GitHub App credential material is read from a config file. Runs read
 `$XDG_CONFIG_HOME/ops-session/config.toml`, or
-`~/.config/ops-session/config.toml` when `XDG_CONFIG_HOME` is unset. Set
-`github_app.private_key_path` there; do not pass private key paths or private
-key contents through CLI arguments or environment variables.
+`~/.config/ops-session/config.toml` when `XDG_CONFIG_HOME` is unset, before
+falling back to `/etc/ops-session/config.toml`. Private keys are configured
+under each `[github_app.profiles.<name>.private_key]` source; do not pass
+private key paths or private key contents through CLI arguments or environment
+variables.
 The config file can contain other top-level provider sections; GitHub App
 commands read `[github_app]` and still reject unknown fields inside that section.
 
 When one node hosts multiple agents, define one `[github_app.profiles.<name>]`
 entry per agent and set `OPS_SESSION_GITHUB_PROFILE` in each agent's service
 environment. Profiles isolate repository scope, optional installation IDs, and
-requested token permissions.
+requested token permissions. A simple local secret store is a private key file
+owned by `root:ops-agent` with mode `0640`, read by agent users that belong to
+the `ops-agent` group.
 
 The child command receives `GH_TOKEN` and `GITHUB_TOKEN`. GitHub App credential
 environment variables are removed from the child environment. Shell syntax such

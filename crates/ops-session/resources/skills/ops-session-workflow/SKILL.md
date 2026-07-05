@@ -27,21 +27,27 @@ ambient environment.
 
 ## Configuration
 
-User-level configuration lives at `$XDG_CONFIG_HOME/ops-session/config.toml`, or
-`~/.config/ops-session/config.toml` when `XDG_CONFIG_HOME` is unset. Provider
-settings are namespaced so one file can hold multiple app-auth providers.
+Runs read `$XDG_CONFIG_HOME/ops-session/config.toml`, or
+`~/.config/ops-session/config.toml` when `XDG_CONFIG_HOME` is unset, before
+using the system config at `/etc/ops-session/config.toml`. Provider settings
+are namespaced so one file can hold multiple app-auth providers. Use
+`--config-path` or `OPS_SESSION_GITHUB_CONFIG_PATH` for local checks and
+development runs.
 
 For GitHub App sessions:
 
 ```toml
 [github_app]
 app_id = 123456
-private_key_path = "/home/me/.config/ops-session/github-app.private-key.pem"
 api_url = "https://api.github.com"
 default_profile = "codex-review"
 
 [github_app.profiles.codex-review]
 repos = ["OWNER/REPO"]
+
+[github_app.profiles.codex-review.private_key]
+type = "file"
+path = "/etc/ops-session/secrets/codex-review-github-app.private-key.pem"
 
 [github_app.profiles.codex-review.permissions]
 contents = "read"
@@ -50,6 +56,11 @@ pull_requests = "read"
 [github_app.profiles.codex-maintainer]
 repos = ["OWNER/REPO"]
 
+[github_app.profiles.codex-maintainer.private_key]
+type = "command"
+command = "/usr/bin/op"
+args = ["read", "op://ops/github-apps/codex-maintainer/private-key"]
+
 [github_app.profiles.codex-maintainer.permissions]
 contents = "write"
 pull_requests = "write"
@@ -57,13 +68,20 @@ pull_requests = "write"
 
 On a node that runs multiple agents, give each agent a distinct provider profile
 and set the profile selector in that agent's service environment. For GitHub App
-sessions, use `OPS_SESSION_GITHUB_PROFILE`. Each profile owns its repository
-scope, optional installation ID, and requested token permissions.
+sessions, use `OPS_SESSION_GITHUB_PROFILE`. Each auth profile owns its private
+key source, repository scope, optional installation ID, requested token
+permissions.
 
-GitHub App private key paths are read only from
-`github_app.private_key_path` in the config file. Use an absolute path. Do not
-pass private key paths or private key contents through shell arguments or
-environment variables.
+GitHub App private keys are read from
+`[github_app.profiles.<profile>.private_key]` sources. `type = "file"` paths
+and `type = "command"` commands must be absolute. Command sources are executed
+without a shell and use stdout as the private key. Do not pass private key paths
+or private key contents through shell arguments or environment variables.
+
+For a simple local secret store, keep private key files readable by the agent
+users' group, for example `root:ops-agent` with mode `0640`. `ops-session` does
+not elevate privileges or switch users; it can only read files that the current
+agent process is allowed to read.
 
 ## GitHub App Sessions
 
@@ -71,7 +89,7 @@ Use `ops-session github-app run ... -- COMMAND` for ordinary GitHub work:
 
 ```sh
 OPS_SESSION_GITHUB_PROFILE=codex-review \
-ops-session github-app run \
+/usr/local/bin/ops-session github-app run \
   -- gh pr view 123 --repo OWNER/REPO
 ```
 
@@ -79,14 +97,17 @@ Use `--git-credentials` for HTTPS Git operations:
 
 ```sh
 OPS_SESSION_GITHUB_PROFILE=codex-maintainer \
-ops-session github-app run \
+/usr/local/bin/ops-session github-app run \
   --git-credentials \
   -- git remote update
 ```
 
-Non-secret values can be overridden per invocation:
+Profile selection can be configured per invocation:
 
 - `--profile NAME` or `OPS_SESSION_GITHUB_PROFILE`
+
+These non-secret values can be overridden per invocation:
+
 - `--app-id` or `GITHUB_APP_ID`
 - `--installation-id` or `GITHUB_APP_INSTALLATION_ID`
 - `--api-url` or `GITHUB_API_URL`
@@ -131,9 +152,9 @@ PATH, and ordinary environment variables.
   credentials in one child process.
 - Scope tokens as narrowly as the provider allows.
 - Request only the permissions needed by the child command.
-- Token caching is disabled by default. If `--token-cache` is used, the selected
-  profile is part of the cache key, so separate agent profiles keep cached
-  credentials isolated on a shared Unix account.
+- Token caching is disabled by default. If `--token-cache` is used, the
+  selected profile is part of the cache key, so separate agent profiles keep
+  cached credentials isolated on a shared Unix account.
 - Provider HTTP clients should use finite timeouts, and provider JWTs or similar
   assertions should remain below upstream maximum lifetimes with clock skew
   accounted for.
