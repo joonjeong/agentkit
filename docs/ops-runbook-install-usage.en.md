@@ -82,12 +82,22 @@ version = 1
 backend = "systemd"
 max_log_lines = 1000
 
+[notifications.telegram.ops]
+chat_id = "123456789"
+bot_token_file = "/etc/ops-runbook/secrets/telegram-bot-token"
+
+[notifications.discord.ops]
+webhook_url_file = "/etc/ops-runbook/secrets/discord-webhook-url"
+
 [callers.hermes]
 # Allows service start, stop, restart, and reload.
 service_control = ["hermes", "cloudflared", "tailscale"]
 
 # Allows service status and logs.
 service_read = ["hermes", "cloudflared", "tailscale"]
+
+# Allows sending alarms without exposing provider credentials to the caller.
+alarms = ["telegram.ops", "discord.ops"]
 ```
 
 The caller is read from `SUDO_USER`. For example, when `hermes` runs:
@@ -122,6 +132,8 @@ sudo /usr/local/sbin/ops-runbook service stop tailscale
 sudo /usr/local/sbin/ops-runbook service reload cloudflared
 sudo /usr/local/sbin/ops-runbook service status cloudflared
 sudo /usr/local/sbin/ops-runbook logs hermes --lines 200 # systemd only
+sudo /usr/local/sbin/ops-runbook alarm send telegram.ops --severity critical --message "disk full"
+sudo /usr/local/sbin/ops-runbook alarm send discord.ops --title "Hermes" --message "service degraded"
 sudo /usr/local/sbin/ops-runbook policy check
 sudo /usr/local/sbin/ops-runbook policy explain
 sudo /usr/local/sbin/ops-runbook policy explain --policy-path ./policy.toml
@@ -136,6 +148,12 @@ Rejected command families are intentionally absent:
 - raw `systemctl`
 - raw `apt`
 - `ansible-playbook`
+
+Alarm destinations are configured under `[notifications.telegram.<name>]` or
+`[notifications.discord.<name>]` and allowlisted per caller with `alarms`.
+Telegram destinations require `chat_id` plus either `bot_token_file` or
+`bot_token_env`. Discord destinations require either `webhook_url_file` or
+`webhook_url_env`.
 
 ## Verification
 

@@ -82,12 +82,22 @@ version = 1
 backend = "systemd"
 max_log_lines = 1000
 
+[notifications.telegram.ops]
+chat_id = "123456789"
+bot_token_file = "/etc/ops-runbook/secrets/telegram-bot-token"
+
+[notifications.discord.ops]
+webhook_url_file = "/etc/ops-runbook/secrets/discord-webhook-url"
+
 [callers.hermes]
 # service start, stop, restart, reload 허용
 service_control = ["hermes", "cloudflared", "tailscale"]
 
 # service status와 logs 허용
 service_read = ["hermes", "cloudflared", "tailscale"]
+
+# provider credential을 caller에게 노출하지 않고 알람 전송 허용
+alarms = ["telegram.ops", "discord.ops"]
 ```
 
 호출자는 `SUDO_USER`에서 읽습니다. 예를 들어 `hermes`가 다음을 실행하면:
@@ -122,6 +132,8 @@ sudo /usr/local/sbin/ops-runbook service stop tailscale
 sudo /usr/local/sbin/ops-runbook service reload cloudflared
 sudo /usr/local/sbin/ops-runbook service status cloudflared
 sudo /usr/local/sbin/ops-runbook logs hermes --lines 200 # systemd only
+sudo /usr/local/sbin/ops-runbook alarm send telegram.ops --severity critical --message "disk full"
+sudo /usr/local/sbin/ops-runbook alarm send discord.ops --title "Hermes" --message "service degraded"
 sudo /usr/local/sbin/ops-runbook policy check
 sudo /usr/local/sbin/ops-runbook policy explain
 sudo /usr/local/sbin/ops-runbook policy explain --policy-path ./policy.toml
@@ -136,6 +148,12 @@ sudo /usr/local/sbin/ops-runbook version
 - raw `systemctl`
 - raw `apt`
 - `ansible-playbook`
+
+알람 목적지는 `[notifications.telegram.<name>]` 또는
+`[notifications.discord.<name>]` 아래에 설정하고, caller별 `alarms`로
+허용합니다. Telegram 목적지는 `chat_id`와 `bot_token_file` 또는
+`bot_token_env`가 필요합니다. Discord 목적지는 `webhook_url_file` 또는
+`webhook_url_env`가 필요합니다.
 
 ## 확인
 

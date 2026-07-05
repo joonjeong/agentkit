@@ -89,6 +89,7 @@ sudo /usr/local/sbin/ops-runbook service stop tailscale
 sudo /usr/local/sbin/ops-runbook service reload cloudflared
 sudo /usr/local/sbin/ops-runbook service status cloudflared
 sudo /usr/local/sbin/ops-runbook logs hermes --lines 200
+sudo /usr/local/sbin/ops-runbook alarm send telegram.ops --severity critical --message "disk full"
 sudo /usr/local/sbin/ops-runbook policy check
 sudo /usr/local/sbin/ops-runbook policy explain
 sudo /usr/local/sbin/ops-runbook policy explain --policy-path ./policy.toml

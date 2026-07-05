@@ -10,9 +10,19 @@ version = 1
 backend = "systemd"
 max_log_lines = 1000
 
+[notifications.telegram.ops]
+chat_id = "123456789"
+bot_token_file = "/etc/ops-runbook/secrets/telegram-bot-token"
+
+[notifications.discord.ops]
+webhook_url_file = "/etc/ops-runbook/secrets/discord-webhook-url"
+
 [callers.hermes]
 # Allows service start, stop, restart, and reload.
 service_control = ["hermes", "cloudflared", "tailscale"]
 
 # Allows service status and logs.
 service_read = ["hermes", "cloudflared", "tailscale"]
+
+# Allows sending alarms without exposing provider credentials to the caller.
+alarms = ["telegram.ops", "discord.ops"]

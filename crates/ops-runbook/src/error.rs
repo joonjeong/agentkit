@@ -28,6 +28,15 @@ pub enum Error {
     #[error("invalid policy option: {0}")]
     InvalidPolicyOption(String),
 
+    #[error("invalid notification option: {0}")]
+    InvalidNotificationOption(String),
+
+    #[error("notification destination not allowed: {0}")]
+    NotificationDestinationNotAllowed(String),
+
+    #[error("notification destination not found: {0}")]
+    NotificationDestinationNotFound(String),
+
     #[error("bootstrap must be run as root")]
     BootstrapRequiresRoot,
 
@@ -60,6 +69,9 @@ pub enum Error {
 
     #[error("command failed: {program} {args}")]
     CommandFailed { program: String, args: String },
+
+    #[error("notification send failed for {destination}: {reason}")]
+    NotificationSend { destination: String, reason: String },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

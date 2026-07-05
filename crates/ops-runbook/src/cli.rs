@@ -8,6 +8,7 @@ use crate::audit;
 use crate::bootstrap::{self, BootstrapArgs};
 use crate::config::{configured_policy_path, Backend, Config};
 use crate::error::{Error, Result};
+use crate::notification::{self, Alarm, Severity};
 use crate::policy::{is_allowed, validate_target, Action};
 use crate::runner;
 
@@ -31,6 +32,8 @@ enum Command {
     Service(ServiceCommand),
     /// Show allowlisted service logs.
     Logs(LogsArgs),
+    /// Send an allowlisted alarm notification.
+    Alarm(AlarmCommand),
     /// Validate or inspect policy.
     Policy(PolicyCommand),
     /// Print the ops-runbook version.
@@ -67,6 +70,36 @@ struct LogsArgs {
     service: String,
     #[arg(long, default_value_t = DEFAULT_LOG_LINES)]
     lines: u32,
+}
+
+#[derive(Debug, Args)]
+struct AlarmCommand {
+    #[command(subcommand)]
+    command: AlarmSubcommand,
+}
+
+#[derive(Debug, Subcommand)]
+enum AlarmSubcommand {
+    /// Send a message to an allowlisted notification destination.
+    Send(AlarmSendArgs),
+}
+
+#[derive(Debug, Args)]
+struct AlarmSendArgs {
+    /// Notification destination in provider.name form, such as telegram.ops.
+    destination: String,
+
+    /// Alarm severity.
+    #[arg(long, value_enum, default_value_t = Severity::Info)]
+    severity: Severity,
+
+    /// Optional short alarm title.
+    #[arg(long)]
+    title: Option<String>,
+
+    /// Alarm message body.
+    #[arg(long)]
+    message: String,
 }
 
 #[derive(Debug, Args)]
@@ -140,6 +173,9 @@ where
             }
         },
         Command::Logs(args) => execute(Action::Logs, &args.service, Some(args.lines), &policy_path),
+        Command::Alarm(command) => match command.command {
+            AlarmSubcommand::Send(args) => send_alarm(args, &policy_path),
+        },
         Command::Policy(command) => match command.command {
             PolicySubcommand::Check(args) => {
                 check_policy(args.policy_path.as_deref().unwrap_or(&policy_path))
@@ -208,6 +244,7 @@ fn explain_policy(policy_path: &Path) -> Result<i32> {
             "    service_read: {}",
             format_string_list(&caller_policy.service_read)
         );
+        println!("    alarms: {}", format_string_list(&caller_policy.alarms));
         println!("    commands:");
         for service in &caller_policy.service_control {
             println!("      service start {service}");
@@ -220,6 +257,9 @@ fn explain_policy(policy_path: &Path) -> Result<i32> {
             if config.backend() == crate::config::Backend::Systemd {
                 println!("      logs {service}");
             }
+        }
+        for destination in &caller_policy.alarms {
+            println!("      alarm send {destination}");
         }
     }
 
@@ -252,6 +292,77 @@ fn template_policy(args: PolicyTemplateArgs) -> Result<i32> {
         path: output,
         source,
     })?;
+    Ok(0)
+}
+
+fn send_alarm(args: AlarmSendArgs, policy_path: &Path) -> Result<i32> {
+    notification::validate_destination_ref(&args.destination)?;
+    notification::validate_alarm_text(args.title.as_deref(), &args.message)?;
+
+    let caller = caller_from_sudo()?;
+    let config = load_valid_config(policy_path)?;
+    let audit_path = audit::configured_audit_log_path();
+    let Some(caller_policy) = config.callers.get(&caller) else {
+        audit::write(
+            &audit_path,
+            &caller,
+            Action::AlarmSend.as_str(),
+            &args.destination,
+            "deny",
+            Some("caller_not_allowed"),
+        )?;
+        return Err(Error::CallerNotAllowed(caller));
+    };
+
+    if !is_allowed(caller_policy, Action::AlarmSend, &args.destination) {
+        audit::write(
+            &audit_path,
+            &caller,
+            Action::AlarmSend.as_str(),
+            &args.destination,
+            "deny",
+            Some("destination_not_allowed"),
+        )?;
+        return Err(Error::NotificationDestinationNotAllowed(args.destination));
+    }
+
+    let Some(destination) = config.notification_destination(&args.destination) else {
+        audit::write(
+            &audit_path,
+            &caller,
+            Action::AlarmSend.as_str(),
+            &args.destination,
+            "deny",
+            Some("destination_not_found"),
+        )?;
+        return Err(Error::NotificationDestinationNotFound(args.destination));
+    };
+
+    audit::write(
+        &audit_path,
+        &caller,
+        Action::AlarmSend.as_str(),
+        &args.destination,
+        "allow",
+        None,
+    )?;
+    let alarm = Alarm {
+        caller: &caller,
+        destination: &args.destination,
+        severity: args.severity,
+        title: args.title.as_deref(),
+        message: &args.message,
+    };
+    notification::send(destination, &alarm)?;
+    audit::write(
+        &audit_path,
+        &caller,
+        Action::AlarmSend.as_str(),
+        &args.destination,
+        "executed",
+        Some("sent"),
+    )?;
+
     Ok(0)
 }
 
@@ -327,6 +438,11 @@ fn execute(
         Action::ServiceReload => runner::service(config.backend(), "reload", target),
         Action::ServiceStatus => runner::service(config.backend(), "status", target),
         Action::Logs => runner::logs(config.backend(), target, lines),
+        Action::AlarmSend => {
+            return Err(Error::InvalidPolicyOption(
+                "alarm_send must use alarm send".to_owned(),
+            ))
+        }
     }?;
 
     let outcome = format!("exit_code={exit_code}");
