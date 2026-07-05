@@ -2,33 +2,26 @@
 
 ## Project Intent
 
-`toolbox` is a personal collection of general-purpose tools that should be easy
-to distribute as Rust binaries attached to GitHub releases.
+This repository is a Rust workspace for small, focused operational binaries that
+are easy to distribute through GitHub releases.
 
-The repository is intentionally a Rust monorepo from the beginning. Most tools
-are expected to be CLI or TUI programs. Keep new work compatible with both:
-
-- busybox-style invocation, for example `toolbox github app-auth`
-- direct subcommand invocation, for example `toolbox github-app-auth`
-- symlink shim invocation, for example `github-app-auth` pointing at `toolbox`
-
-Prefer small, focused crates under `crates/` over large unrelated modules in one
-place. The current entrypoint crate is `crates/toolbox`.
+Prefer independent crates under `crates/` over shared multiplexing binaries.
+Each tool should own its command surface directly, like `ops-session` and
+`ops-runbook`.
 
 ## Current Tool Surface
 
-The first supported command is GitHub App authentication for coding agents that
-need to work on issues or pull requests:
+`ops-session` runs a child command inside a short-lived GitHub App installation
+token context:
 
 ```sh
-toolbox github app-auth ...
-toolbox github-app-auth ...
-github-app-auth ...
+ops-session github-app run ... -- COMMAND [ARG]...
 ```
 
-The command signs a GitHub App JWT, exchanges it for an installation token, and
-prints the token or a shell export statement. Preserve these behaviors when
-refactoring.
+Prefer `ops-session github-app run ... -- COMMAND` for normal agent GitHub work
+so tokens are injected only into the child process.
+GitHub App private key paths are read from the GitHub config file, not from
+arguments or environment variables.
 
 Important details:
 

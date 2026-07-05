@@ -1,0 +1,20 @@
+app_id = 123456
+private_key_path = "/home/me/.config/ops-session/github-app.private-key.pem"
+api_url = "https://api.github.com"
+default_profile = "repo-read"
+
+[[profiles]]
+name = "repo-read"
+repos = ["OWNER/REPO"]
+
+[profiles.permissions]
+contents = "read"
+pull_requests = "read"
+
+[[profiles]]
+name = "repo-write"
+repos = ["OWNER/REPO"]
+
+[profiles.permissions]
+contents = "write"
+pull_requests = "write"

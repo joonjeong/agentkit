@@ -1,11 +1,10 @@
 [workspace]
-members = ["crates/toolbox", "crates/ops-runbook"]
+members = ["crates/ops-session", "crates/ops-runbook"]
 resolver = "2"
 
 [workspace.package]
 edition = "2021"
 license = "MIT"
-repository = "https://github.com/joonjeong/toolbox"
 
 [workspace.lints.clippy]
 dbg_macro = "deny"

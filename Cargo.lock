@@ -985,6 +985,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "ops-session"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "assert_cmd",
+ "base64",
+ "clap",
+ "jsonwebtoken",
+ "predicates",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2",
+ "time",
+ "toml",
+]
+
+[[package]]
 name = "p256"
 version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1791,23 +1809,6 @@ name = "toml_writer"
 version = "1.1.1+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "756daf9b1013ebe47a8776667b466417e2d4c5679d441c26230efd9ef78692db"
-
-[[package]]
-name = "toolbox"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "assert_cmd",
- "base64",
- "clap",
- "jsonwebtoken",
- "predicates",
- "reqwest",
- "serde",
- "serde_json",
- "sha2",
- "time",
-]
 
 [[package]]
 name = "tower"

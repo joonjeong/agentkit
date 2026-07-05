@@ -3,13 +3,13 @@ use std::env;
 use std::ffi::OsString;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{anyhow, Context, Result};
 use base64::Engine;
-use clap::{Args, ValueEnum};
+use clap::{Args, Subcommand};
 use jsonwebtoken::{Algorithm, EncodingKey, Header};
 use reqwest::blocking::Client;
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, USER_AGENT};
@@ -21,139 +21,35 @@ use time::OffsetDateTime;
 
 const APP_AGENT_WORKFLOW_SKILL_NAME: &str = "github-app-agent-workflow";
 const APP_AGENT_WORKFLOW_SKILL: &str =
-    include_str!("../resources/github-app-agent-workflow/SKILL.md");
+    include_str!("../resources/skills/github-app-agent-workflow/SKILL.md");
+const GITHUB_APP_CONFIG_TEMPLATE: &str =
+    include_str!("../resources/templates/github-app-config.toml");
 const TOKEN_CACHE_EXPIRY_GRACE_SECONDS: i64 = 60;
 
 #[derive(Debug, Args)]
 #[command(
-    about = "Authenticate as a GitHub App installation",
-    long_about = "Sign a GitHub App JWT, exchange it for an installation access token, and print the token to stdout.
-
-Use this command to debug app-based authentication behavior or to support integrations that explicitly need token stdout. For ordinary agent GitHub work, prefer toolbox github app-run. Provide the app ID, --repo OWNER/REPO, and exactly one private key source: --private-key-file or --private-key. Values can also come from the documented environment variables.",
-    after_long_help = "Purpose:
-  Sign a GitHub App JWT, exchange it for an installation access token, and print the token to stdout. This is primarily for debugging app-based authentication behavior or integrations that explicitly need token stdout. For ordinary agent GitHub work, prefer toolbox github app-run.
-
-Invocation forms:
-  toolbox github app-auth [OPTIONS]
-  toolbox github-app-auth [OPTIONS]
-  github-app-auth [OPTIONS]    when symlinked to the toolbox binary
-
-Examples:
-  toolbox github app-auth \\
-    --app-id \"$GITHUB_APP_ID\" \\
-    --repo OWNER/REPO \\
-    --private-key-file /path/to/private-key.pem \\
-    --format json
-
-  toolbox github-app-auth --jwt-only \\
-    --app-id \"$GITHUB_APP_ID\" \\
-    --private-key-file /path/to/private-key.pem
-
-Environment:
-  GITHUB_APP_ID
-  GITHUB_APP_INSTALLATION_ID
-  GITHUB_APP_PRIVATE_KEY_FILE
-  GITHUB_APP_PRIVATE_KEY_PATH
-  GITHUB_APP_PRIVATE_KEY
-  GITHUB_API_URL
-
-Output:
-  By default, prints only the installation token. Treat that mode as an integration escape hatch with a secret-safe destination, not the ordinary agent workflow. With --format json, prints structured diagnostic JSON without the token. With --jwt-only, prints the signed GitHub App JWT and does not call the installation token API. Use toolbox github app-run for normal gh commands.
-
-Repository scoping:
-  Use --repo OWNER/REPO to scope the token to one or more repositories. Repeat --repo for multiple repositories. When --installation-id is omitted, the first --repo value is also used to discover the installation. OWNER/REPO is accepted for user-facing clarity; only repository names are sent to GitHub's installation token API."
+    about = "GitHub App-backed operations session commands",
+    after_long_help = "Invocation forms:
+  ops-session github-app run [OPTIONS] -- COMMAND [ARG]...
+  ops-session github-app config check
+  ops-session github-app config template"
 )]
-pub struct AppAuthArgs {
-    /// GitHub App ID.
-    ///
-    /// Can also be set with GITHUB_APP_ID.
-    #[arg(long, env = "GITHUB_APP_ID")]
-    app_id: u64,
+pub struct GithubAppArgs {
+    #[command(subcommand)]
+    command: GithubAppSubcommand,
+}
 
-    /// GitHub App installation ID.
-    ///
-    /// Can also be set with GITHUB_APP_INSTALLATION_ID. Prefer --repo OWNER/REPO
-    /// unless the installation ID is already known.
-    #[arg(long, env = "GITHUB_APP_INSTALLATION_ID")]
-    installation_id: Option<u64>,
-
-    /// Path to the GitHub App private key PEM file.
-    ///
-    /// Use this or --private-key, not both. Can also be set with
-    /// GITHUB_APP_PRIVATE_KEY_FILE or GITHUB_APP_PRIVATE_KEY_PATH.
-    #[arg(
-        long,
-        env = "GITHUB_APP_PRIVATE_KEY_FILE",
-        conflicts_with = "private_key"
-    )]
-    private_key_file: Option<PathBuf>,
-
-    /// Path to the GitHub App private key PEM file.
-    ///
-    /// Compatibility alias for Ciel/Hermes style environments. Use this or
-    /// --private-key-file, not both. Can also be set with
-    /// GITHUB_APP_PRIVATE_KEY_PATH.
-    #[arg(
-        long = "private-key-path",
-        env = "GITHUB_APP_PRIVATE_KEY_PATH",
-        conflicts_with_all = ["private_key_file", "private_key"]
-    )]
-    private_key_path: Option<PathBuf>,
-
-    /// GitHub App private key PEM content.
-    ///
-    /// Use this or --private-key-file, not both. Can also be set with
-    /// GITHUB_APP_PRIVATE_KEY. Prefer --private-key-file in shell history.
-    #[arg(
-        long,
-        env = "GITHUB_APP_PRIVATE_KEY",
-        allow_hyphen_values = true,
-        conflicts_with = "private_key_file"
-    )]
-    private_key: Option<String>,
-
-    /// GitHub API base URL.
-    ///
-    /// Override for GitHub Enterprise Server. Can also be set with
-    /// GITHUB_API_URL.
-    #[arg(long, env = "GITHUB_API_URL", default_value = "https://api.github.com")]
-    api_url: String,
-
-    /// Scope the token to a repository.
-    ///
-    /// Repeat for multiple repositories. Without --installation-id, the first
-    /// --repo value is also used to discover the installation. Public repository
-    /// access alone is not enough; the GitHub App must be installed on the repo
-    /// or owner.
-    #[arg(
-        long = "repo",
-        value_name = "OWNER/REPO",
-        required_unless_present_any = ["jwt_only", "installation_id"]
-    )]
-    repos: Vec<String>,
-
-    /// Limit installation token permissions.
-    ///
-    /// Repeat as key=value, for example --permission contents=read. Values are
-    /// sent unchanged to GitHub's installation token API.
-    #[arg(long = "permission", value_name = "KEY=VALUE")]
-    permissions: Vec<PermissionArg>,
-
-    /// Output format.
-    #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
-    format: OutputFormat,
-
-    /// Print the signed GitHub App JWT and skip token exchange.
-    ///
-    /// Useful for debugging app authentication. The JWT is intentionally short
-    /// lived and remains below GitHub's 10-minute maximum.
-    #[arg(long, conflicts_with_all = ["repos", "permissions"])]
-    jwt_only: bool,
+#[derive(Debug, Subcommand)]
+enum GithubAppSubcommand {
+    /// Run a command through a GitHub App installation token.
+    Run(GithubSessionArgs),
+    /// Validate or generate GitHub App auth config.
+    Config(GithubAuthConfigArgs),
 }
 
 #[derive(Debug, Args)]
 #[command(
-    about = "Run a command with a GitHub App installation token",
+    about = "Run a command in a GitHub App-backed operations session",
     long_about = "Sign a GitHub App JWT, exchange it for an installation access token, and run a command with GH_TOKEN and GITHUB_TOKEN set for that process.
 
 Use this command from coding agents or automation that need temporary GitHub repository access through a GitHub App installation without exporting a token into the parent shell.",
@@ -161,27 +57,23 @@ Use this command from coding agents or automation that need temporary GitHub rep
   Sign a GitHub App JWT, exchange it for an installation access token, and run a command with GH_TOKEN and GITHUB_TOKEN set for that process.
 
 Invocation forms:
-  toolbox github app-run [OPTIONS] -- COMMAND [ARG]...
-  toolbox github-app-run [OPTIONS] -- COMMAND [ARG]...
-  github-app-run [OPTIONS] -- COMMAND [ARG]...    when symlinked to the toolbox binary
+  ops-session github-app run [OPTIONS] -- COMMAND [ARG]...
 
 Examples:
-  toolbox github app-run \\
+  ops-session github-app run \\
     --app-id \"$GITHUB_APP_ID\" \\
     --repo OWNER/REPO \\
-    --private-key-file /path/to/private-key.pem \\
     -- gh pr comment 123 --body \"Done\"
 
 Environment:
   GITHUB_APP_ID
   GITHUB_APP_INSTALLATION_ID
-  GITHUB_APP_PRIVATE_KEY_FILE
-  GITHUB_APP_PRIVATE_KEY_PATH
-  GITHUB_APP_PRIVATE_KEY
   GITHUB_API_URL
+  OPS_SESSION_GITHUB_CONFIG_PATH
+  OPS_SESSION_GITHUB_PROFILE
 
 Repository scoping:
-  Use --repo OWNER/REPO to scope the token to one or more repositories. Repeat --repo for multiple repositories. When --installation-id is omitted, the first --repo value is also used to discover the installation. OWNER/REPO is accepted for user-facing clarity; only repository names are sent to GitHub's installation token API.
+  Use --profile NAME to select a config profile when repositories need different token permissions. Use --repo OWNER/REPO to override the selected profile's repository list. Repeat --repo for multiple repositories. When --installation-id is omitted, the first repository is also used to discover the installation. OWNER/REPO is accepted for user-facing clarity; only repository names are sent to GitHub's installation token API.
 
 Execution:
   The command after -- is run directly with GH_TOKEN and GITHUB_TOKEN set to the temporary installation token. GitHub App credential environment variables are removed from the child environment. The child process inherits stdin, stdout, stderr, working directory, PATH, and other ordinary environment variables. Shell syntax such as pipes, redirects, aliases, and shell functions requires an explicit shell command, for example -- sh -c 'gh issue view 123 | jq .url'.
@@ -189,12 +81,19 @@ Execution:
 Git HTTPS authentication:
   Git does not automatically use GH_TOKEN or GITHUB_TOKEN as HTTPS credentials. Pass --git-credentials to install a child-only Git credential helper that answers HTTPS credential requests for the GitHub host with username x-access-token and the temporary installation token."
 )]
-pub struct AppRunArgs {
+pub struct GithubSessionArgs {
+    /// Path to the GitHub provider config file.
+    ///
+    /// Defaults to $XDG_CONFIG_HOME/ops-session/github.toml, or
+    /// ~/.config/ops-session/github.toml when XDG_CONFIG_HOME is unset.
+    #[arg(long, env = "OPS_SESSION_GITHUB_CONFIG_PATH")]
+    config_path: Option<PathBuf>,
+
     /// GitHub App ID.
     ///
-    /// Can also be set with GITHUB_APP_ID.
+    /// Can also be set with GITHUB_APP_ID or config file app_id.
     #[arg(long, env = "GITHUB_APP_ID")]
-    app_id: u64,
+    app_id: Option<u64>,
 
     /// GitHub App installation ID.
     ///
@@ -203,47 +102,25 @@ pub struct AppRunArgs {
     #[arg(long, env = "GITHUB_APP_INSTALLATION_ID")]
     installation_id: Option<u64>,
 
-    /// Path to the GitHub App private key PEM file.
-    ///
-    /// Use this or --private-key, not both. Can also be set with
-    /// GITHUB_APP_PRIVATE_KEY_FILE or GITHUB_APP_PRIVATE_KEY_PATH.
-    #[arg(
-        long,
-        env = "GITHUB_APP_PRIVATE_KEY_FILE",
-        conflicts_with = "private_key"
-    )]
-    private_key_file: Option<PathBuf>,
-
-    /// Path to the GitHub App private key PEM file.
-    ///
-    /// Compatibility alias for Ciel/Hermes style environments. Use this or
-    /// --private-key-file, not both. Can also be set with
-    /// GITHUB_APP_PRIVATE_KEY_PATH.
-    #[arg(
-        long = "private-key-path",
-        env = "GITHUB_APP_PRIVATE_KEY_PATH",
-        conflicts_with_all = ["private_key_file", "private_key"]
-    )]
-    private_key_path: Option<PathBuf>,
-
-    /// GitHub App private key PEM content.
-    ///
-    /// Use this or --private-key-file, not both. Can also be set with
-    /// GITHUB_APP_PRIVATE_KEY. Prefer --private-key-file in shell history.
-    #[arg(
-        long,
-        env = "GITHUB_APP_PRIVATE_KEY",
-        allow_hyphen_values = true,
-        conflicts_with = "private_key_file"
-    )]
-    private_key: Option<String>,
-
     /// GitHub API base URL.
     ///
     /// Override for GitHub Enterprise Server. Can also be set with
-    /// GITHUB_API_URL.
-    #[arg(long, env = "GITHUB_API_URL", default_value = "https://api.github.com")]
-    api_url: String,
+    /// GITHUB_API_URL or config file api_url.
+    #[arg(long, env = "GITHUB_API_URL")]
+    api_url: Option<String>,
+
+    /// Named auth profile from the config file.
+    ///
+    /// Use this when different repositories need different token permissions.
+    #[arg(long, env = "OPS_SESSION_GITHUB_PROFILE")]
+    profile: Option<String>,
+
+    /// Reuse a valid cached installation token.
+    ///
+    /// Disabled by default. When enabled, the selected config profile is part
+    /// of the cache key.
+    #[arg(long)]
+    token_cache: bool,
 
     /// Scope the token to a repository.
     ///
@@ -251,11 +128,7 @@ pub struct AppRunArgs {
     /// --repo value is also used to discover the installation. Public repository
     /// access alone is not enough; the GitHub App must be installed on the repo
     /// or owner.
-    #[arg(
-        long = "repo",
-        value_name = "OWNER/REPO",
-        required_unless_present = "installation_id"
-    )]
+    #[arg(long = "repo", value_name = "OWNER/REPO")]
     repos: Vec<String>,
 
     /// Limit installation token permissions.
@@ -284,10 +157,40 @@ pub struct AppRunArgs {
     command: Vec<OsString>,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
-enum OutputFormat {
-    Text,
-    Json,
+#[derive(Debug, Args)]
+#[command(about = "Validate or generate GitHub App auth config")]
+pub struct GithubAuthConfigArgs {
+    #[command(subcommand)]
+    command: GithubAuthConfigSubcommand,
+}
+
+#[derive(Debug, Subcommand)]
+enum GithubAuthConfigSubcommand {
+    /// Load and validate the GitHub App auth config file.
+    Check(GithubAuthConfigCheckArgs),
+    /// Generate an example GitHub App auth config template.
+    Template(GithubAuthConfigTemplateArgs),
+}
+
+#[derive(Debug, Args)]
+struct GithubAuthConfigCheckArgs {
+    /// Path to the GitHub App auth config file.
+    ///
+    /// Defaults to $XDG_CONFIG_HOME/ops-session/github.toml, or
+    /// ~/.config/ops-session/github.toml when XDG_CONFIG_HOME is unset.
+    #[arg(long, env = "OPS_SESSION_GITHUB_CONFIG_PATH")]
+    config_path: Option<PathBuf>,
+}
+
+#[derive(Debug, Args)]
+struct GithubAuthConfigTemplateArgs {
+    /// Write the template to a file instead of stdout.
+    #[arg(long)]
+    output: Option<PathBuf>,
+
+    /// Replace an existing output file.
+    #[arg(long)]
+    force: bool,
 }
 
 #[derive(Debug, Args)]
@@ -297,8 +200,8 @@ enum OutputFormat {
 
 The command writes INSTALL_PATH/github-app-agent-workflow/SKILL.md. Use it to install the agent-facing workflow guidance next to Codex, Hermes, or another agent's skill directory without copying files manually.",
     after_long_help = "Examples:
-  toolbox github agent-skill --install-path ~/.codex/skills
-  toolbox github-agent-skill -i ./skills --force
+  ops-session agent-skill --install-path ~/.codex/skills
+  ops-session agent-skill -i ./skills --force
 
 Output:
   Prints the created skill directory path."
@@ -332,6 +235,8 @@ struct TokenRequest {
 
 #[derive(Debug, Serialize)]
 struct TokenCacheKey {
+    config_path: String,
+    profile: Option<String>,
     app_id: u64,
     installation_id: u64,
     api_url: String,
@@ -349,38 +254,11 @@ struct CachedToken {
 struct TokenResponse {
     token: String,
     expires_at: Option<String>,
-    repository_selection: Option<String>,
-    #[serde(default)]
-    repositories: Vec<TokenRepository>,
-    #[serde(default)]
-    permissions: BTreeMap<String, String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct TokenRepository {
-    name: Option<String>,
-    full_name: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 struct InstallationResponse {
     id: u64,
-}
-
-#[derive(Debug, Serialize)]
-struct JsonTokenOutput<'a> {
-    installation_id: u64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    repository_selection: Option<&'a str>,
-    repositories: Vec<String>,
-    permissions: &'a BTreeMap<String, String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    expires_at: Option<&'a str>,
-}
-
-#[derive(Debug, Serialize)]
-struct JsonJwtOutput<'a> {
-    jwt: &'a str,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -389,18 +267,93 @@ struct PermissionArg {
     value: String,
 }
 
+#[derive(Debug, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+struct GithubConfigFile {
+    app_id: Option<u64>,
+    installation_id: Option<u64>,
+    private_key_path: Option<PathBuf>,
+    api_url: Option<String>,
+    default_profile: Option<String>,
+    #[serde(default)]
+    profiles: Vec<GithubConfigProfile>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct GithubConfigProfile {
+    name: String,
+    installation_id: Option<u64>,
+    #[serde(default)]
+    repos: Vec<String>,
+    #[serde(default)]
+    permissions: BTreeMap<String, String>,
+}
+
+#[derive(Debug)]
+struct ResolvedGithubConfig {
+    config_path: PathBuf,
+    profile_name: Option<String>,
+    app_id: u64,
+    installation_id: Option<u64>,
+    private_key_path: PathBuf,
+    api_url: String,
+    repos: Vec<String>,
+    permissions: Vec<PermissionArg>,
+}
+
 trait AppTokenConfig {
     fn app_id(&self) -> u64;
     fn installation_id(&self) -> Option<u64>;
-    fn private_key_file(&self) -> Option<&PathBuf>;
     fn private_key_path(&self) -> Option<&PathBuf>;
-    fn private_key(&self) -> Option<&str>;
     fn api_url(&self) -> &str;
+    fn repos(&self) -> &[String];
+    fn permissions(&self) -> &[PermissionArg];
+    fn config_path(&self) -> &Path;
+    fn profile_name(&self) -> Option<&str>;
+}
+
+trait GithubConfigArgs {
+    fn config_path(&self) -> Option<&PathBuf>;
+    fn app_id(&self) -> Option<u64>;
+    fn installation_id(&self) -> Option<u64>;
+    fn api_url(&self) -> Option<&str>;
+    fn profile(&self) -> Option<&str>;
     fn repos(&self) -> &[String];
     fn permissions(&self) -> &[PermissionArg];
 }
 
-impl AppTokenConfig for AppAuthArgs {
+impl GithubConfigArgs for GithubSessionArgs {
+    fn config_path(&self) -> Option<&PathBuf> {
+        self.config_path.as_ref()
+    }
+
+    fn app_id(&self) -> Option<u64> {
+        self.app_id
+    }
+
+    fn installation_id(&self) -> Option<u64> {
+        self.installation_id
+    }
+
+    fn api_url(&self) -> Option<&str> {
+        self.api_url.as_deref()
+    }
+
+    fn profile(&self) -> Option<&str> {
+        self.profile.as_deref()
+    }
+
+    fn repos(&self) -> &[String] {
+        &self.repos
+    }
+
+    fn permissions(&self) -> &[PermissionArg] {
+        &self.permissions
+    }
+}
+
+impl AppTokenConfig for ResolvedGithubConfig {
     fn app_id(&self) -> u64 {
         self.app_id
     }
@@ -409,16 +362,8 @@ impl AppTokenConfig for AppAuthArgs {
         self.installation_id
     }
 
-    fn private_key_file(&self) -> Option<&PathBuf> {
-        self.private_key_file.as_ref()
-    }
-
     fn private_key_path(&self) -> Option<&PathBuf> {
-        self.private_key_path.as_ref()
-    }
-
-    fn private_key(&self) -> Option<&str> {
-        self.private_key.as_deref()
+        Some(&self.private_key_path)
     }
 
     fn api_url(&self) -> &str {
@@ -432,61 +377,100 @@ impl AppTokenConfig for AppAuthArgs {
     fn permissions(&self) -> &[PermissionArg] {
         &self.permissions
     }
-}
 
-impl AppTokenConfig for AppRunArgs {
-    fn app_id(&self) -> u64 {
-        self.app_id
+    fn config_path(&self) -> &Path {
+        &self.config_path
     }
 
-    fn installation_id(&self) -> Option<u64> {
-        self.installation_id
-    }
-
-    fn private_key_file(&self) -> Option<&PathBuf> {
-        self.private_key_file.as_ref()
-    }
-
-    fn private_key_path(&self) -> Option<&PathBuf> {
-        self.private_key_path.as_ref()
-    }
-
-    fn private_key(&self) -> Option<&str> {
-        self.private_key.as_deref()
-    }
-
-    fn api_url(&self) -> &str {
-        &self.api_url
-    }
-
-    fn repos(&self) -> &[String] {
-        &self.repos
-    }
-
-    fn permissions(&self) -> &[PermissionArg] {
-        &self.permissions
+    fn profile_name(&self) -> Option<&str> {
+        self.profile_name.as_deref()
     }
 }
 
-pub fn app_auth(args: AppAuthArgs) -> Result<()> {
-    let jwt = create_jwt(args.app_id(), &read_private_key(&args)?)?;
-
-    if args.jwt_only {
-        print_jwt(&args, &jwt)?;
-        return Ok(());
+pub fn github_app(args: GithubAppArgs) -> Result<()> {
+    match args.command {
+        GithubAppSubcommand::Run(args) => github_session(args),
+        GithubAppSubcommand::Config(args) => github_auth_config(args),
     }
+}
 
-    let client = github_client(&jwt)?;
-    let installation_id = resolve_installation_id(&args, &client)?;
-    let response = create_installation_token(&args, &client, installation_id)?;
-    print_token(&args, installation_id, &response)?;
+pub fn github_session(args: GithubSessionArgs) -> Result<()> {
+    let use_token_cache = args.token_cache;
+    let config = resolve_github_config(&args)?;
+    let token = if use_token_cache {
+        cached_or_fresh_installation_token(&config)?.token
+    } else {
+        installation_token(&config)?.token
+    };
+    run_with_installation_token(
+        &args.command,
+        &token,
+        args.git_credentials,
+        config.api_url(),
+    )
+}
+
+pub fn github_auth_config(args: GithubAuthConfigArgs) -> Result<()> {
+    match args.command {
+        GithubAuthConfigSubcommand::Check(args) => check_github_auth_config(args),
+        GithubAuthConfigSubcommand::Template(args) => template_github_auth_config(args),
+    }
+}
+
+fn check_github_auth_config(args: GithubAuthConfigCheckArgs) -> Result<()> {
+    let config_path = github_config_path(args.config_path.as_ref())?;
+    let file = read_required_github_config(&config_path)?;
+    validate_github_config_file(&file, &config_path)?;
+
+    println!("config OK: {}", config_path.display());
+    println!("app_id: {}", file.app_id.expect("validated app_id"));
+    if let Some(installation_id) = file.installation_id {
+        println!("installation_id: {installation_id}");
+    }
+    println!(
+        "private_key_path: {}",
+        file.private_key_path
+            .expect("validated private_key_path")
+            .display()
+    );
+    println!(
+        "api_url: {}",
+        file.api_url
+            .unwrap_or_else(|| "https://api.github.com".to_string())
+    );
+    if let Some(default_profile) = file.default_profile {
+        println!("default_profile: {default_profile}");
+    }
+    println!("profiles:");
+    for profile in file.profiles {
+        println!("  {}:", profile.name);
+        if let Some(installation_id) = profile.installation_id {
+            println!("    installation_id: {installation_id}");
+        }
+        println!("    repos: {}", format_string_list(&profile.repos));
+        println!(
+            "    permissions: {}",
+            format_permission_map(&profile.permissions)
+        );
+    }
 
     Ok(())
 }
 
-pub fn app_run(args: AppRunArgs) -> Result<()> {
-    let token = cached_or_fresh_installation_token(&args)?.token;
-    run_with_installation_token(&args.command, &token, args.git_credentials, &args.api_url)
+fn template_github_auth_config(args: GithubAuthConfigTemplateArgs) -> Result<()> {
+    let template = github_app_config_template();
+    let Some(output) = args.output else {
+        print!("{template}");
+        return Ok(());
+    };
+
+    if output.exists() && !args.force {
+        return Err(anyhow!("output already exists: {}", output.display()));
+    }
+
+    fs::write(&output, template)
+        .with_context(|| format!("failed to write {}", output.display()))?;
+    Ok(())
 }
 
 pub fn create_app_agent_workflow_skill(args: AppAgentWorkflowSkillArgs) -> Result<()> {
@@ -510,21 +494,278 @@ pub fn create_app_agent_workflow_skill(args: AppAgentWorkflowSkillArgs) -> Resul
 }
 
 fn read_private_key(args: &impl AppTokenConfig) -> Result<String> {
-    match (
-        args.private_key(),
-        args.private_key_file(),
-        args.private_key_path(),
-    ) {
-        (Some(_), Some(_), _) | (Some(_), _, Some(_)) | (_, Some(_), Some(_)) => Err(anyhow!(
-            "use only one of --private-key, --private-key-file, or --private-key-path"
-        )),
-        (Some(key), None, None) => Ok(key.to_string()),
-        (None, Some(path), None) | (None, None, Some(path)) => fs::read_to_string(path)
-            .with_context(|| format!("failed to read private key from {}", path.display())),
-        (None, None, None) => Err(anyhow!(
-            "missing private key; set --private-key-file, --private-key-path, --private-key, GITHUB_APP_PRIVATE_KEY_FILE, GITHUB_APP_PRIVATE_KEY_PATH, or GITHUB_APP_PRIVATE_KEY"
-        )),
+    let path = args
+        .private_key_path()
+        .ok_or_else(|| anyhow!("missing private_key_path in GitHub config file"))?;
+    fs::read_to_string(path)
+        .with_context(|| format!("failed to read private key from {}", path.display()))
+}
+
+fn resolve_github_config(args: &impl GithubConfigArgs) -> Result<ResolvedGithubConfig> {
+    let config_path = github_config_path(args.config_path())?;
+    let file = read_github_config(&config_path)?;
+    let selected_profile = select_github_config_profile(&file, args, &config_path)?;
+    let permissions = if args.permissions().is_empty() {
+        selected_profile
+            .map(|profile| permission_args_from_map(profile.permissions.clone()))
+            .unwrap_or_default()
+    } else {
+        args.permissions().to_vec()
+    };
+    let repos = if args.repos().is_empty() {
+        selected_profile
+            .map(|profile| profile.repos.clone())
+            .unwrap_or_default()
+    } else {
+        args.repos().to_vec()
+    };
+
+    Ok(ResolvedGithubConfig {
+        config_path: config_path.clone(),
+        profile_name: selected_profile.map(|profile| profile.name.clone()),
+        app_id: args.app_id().or(file.app_id).ok_or_else(|| {
+            anyhow!(
+                "missing GitHub App ID; set --app-id, GITHUB_APP_ID, or app_id in {}",
+                config_path.display()
+            )
+        })?,
+        installation_id: args
+            .installation_id()
+            .or_else(|| selected_profile.and_then(|profile| profile.installation_id))
+            .or(file.installation_id),
+        private_key_path: file.private_key_path.ok_or_else(|| {
+            anyhow!(
+                "missing private_key_path in GitHub config file {}",
+                config_path.display()
+            )
+        })?,
+        api_url: args
+            .api_url()
+            .map(str::to_string)
+            .or(file.api_url)
+            .unwrap_or_else(|| "https://api.github.com".to_string()),
+        repos,
+        permissions,
+    })
+}
+
+fn select_github_config_profile<'a>(
+    file: &'a GithubConfigFile,
+    args: &impl GithubConfigArgs,
+    path: &Path,
+) -> Result<Option<&'a GithubConfigProfile>> {
+    if let Some(profile_name) = args.profile() {
+        return file
+            .profiles
+            .iter()
+            .find(|profile| profile.name == profile_name)
+            .map(Some)
+            .ok_or_else(|| {
+                anyhow!(
+                    "unknown GitHub auth config profile {profile_name:?} in {}",
+                    path.display()
+                )
+            });
     }
+
+    if let Some(default_profile) = &file.default_profile {
+        return file
+            .profiles
+            .iter()
+            .find(|profile| profile.name == *default_profile)
+            .map(Some)
+            .ok_or_else(|| {
+                anyhow!(
+                    "default_profile {default_profile:?} is not defined in {}",
+                    path.display()
+                )
+            });
+    }
+
+    if file.profiles.len() == 1 {
+        return Ok(file.profiles.first());
+    }
+
+    if file.profiles.len() > 1 && args.repos().is_empty() {
+        return Err(anyhow!(
+            "multiple GitHub auth config profiles are defined in {}; set --profile or default_profile",
+            path.display()
+        ));
+    }
+
+    Ok(None)
+}
+
+fn github_config_path(path: Option<&PathBuf>) -> Result<PathBuf> {
+    if let Some(path) = path {
+        return Ok(path.clone());
+    }
+    if let Some(config_home) = env::var_os("XDG_CONFIG_HOME") {
+        return Ok(PathBuf::from(config_home)
+            .join("ops-session")
+            .join("github.toml"));
+    }
+    if let Some(home) = env::var_os("HOME") {
+        return Ok(PathBuf::from(home)
+            .join(".config")
+            .join("ops-session")
+            .join("github.toml"));
+    }
+    Err(anyhow!(
+        "cannot determine GitHub config path; set --config-path, OPS_SESSION_GITHUB_CONFIG_PATH, XDG_CONFIG_HOME, or HOME"
+    ))
+}
+
+fn read_github_config(path: &PathBuf) -> Result<GithubConfigFile> {
+    match fs::read_to_string(path) {
+        Ok(contents) => toml::from_str(&contents)
+            .with_context(|| format!("failed to parse GitHub config {}", path.display())),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            Ok(GithubConfigFile::default())
+        }
+        Err(error) => {
+            Err(error).with_context(|| format!("failed to read GitHub config {}", path.display()))
+        }
+    }
+}
+
+fn read_required_github_config(path: &Path) -> Result<GithubConfigFile> {
+    let contents = fs::read_to_string(path)
+        .with_context(|| format!("failed to read GitHub config {}", path.display()))?;
+    toml::from_str(&contents)
+        .with_context(|| format!("failed to parse GitHub config {}", path.display()))
+}
+
+fn validate_github_config_file(file: &GithubConfigFile, path: &Path) -> Result<()> {
+    let mut profile_names = BTreeMap::<&str, usize>::new();
+
+    if file.app_id.is_none() {
+        return Err(anyhow!(
+            "missing app_id in GitHub config file {}",
+            path.display()
+        ));
+    }
+
+    let private_key_path = file.private_key_path.as_ref().ok_or_else(|| {
+        anyhow!(
+            "missing private_key_path in GitHub config file {}",
+            path.display()
+        )
+    })?;
+    if !private_key_path.is_absolute() {
+        return Err(anyhow!(
+            "private_key_path must be absolute in GitHub config file {}",
+            path.display()
+        ));
+    }
+
+    if let Some(api_url) = &file.api_url {
+        let parsed = Url::parse(api_url)
+            .with_context(|| format!("invalid api_url in GitHub config file {}", path.display()))?;
+        if parsed.host_str().is_none() {
+            return Err(anyhow!(
+                "api_url must include a host in GitHub config file {}",
+                path.display()
+            ));
+        }
+    }
+
+    if file.profiles.is_empty() {
+        return Err(anyhow!(
+            "missing profiles in GitHub config file {}",
+            path.display()
+        ));
+    }
+
+    for profile in &file.profiles {
+        if profile.name.is_empty() {
+            return Err(anyhow!(
+                "profile name must not be empty in GitHub config file {}",
+                path.display()
+            ));
+        }
+        *profile_names.entry(profile.name.as_str()).or_default() += 1;
+
+        if profile.repos.is_empty() {
+            return Err(anyhow!(
+                "profile {:?} must include at least one repo in GitHub config file {}",
+                profile.name,
+                path.display()
+            ));
+        }
+
+        for repo in &profile.repos {
+            validate_repo_scope(repo).with_context(|| {
+                format!("invalid repo in GitHub config file {}", path.display())
+            })?;
+        }
+
+        for (key, value) in &profile.permissions {
+            if key.is_empty() || value.is_empty() {
+                return Err(anyhow!(
+                    "profile {:?} permissions must use non-empty key/value entries in GitHub config file {}",
+                    profile.name,
+                    path.display()
+                ));
+            }
+        }
+    }
+
+    if let Some((name, _)) = profile_names.iter().find(|(_, count)| **count > 1) {
+        return Err(anyhow!(
+            "duplicate profile {:?} in GitHub config file {}",
+            name,
+            path.display()
+        ));
+    }
+
+    if let Some(default_profile) = &file.default_profile {
+        if !profile_names.contains_key(default_profile.as_str()) {
+            return Err(anyhow!(
+                "default_profile {:?} is not defined in GitHub config file {}",
+                default_profile,
+                path.display()
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_repo_scope(repo: &str) -> Result<()> {
+    let mut parts = repo.split('/');
+    let owner = parts.next().unwrap_or_default();
+    let name = parts.next().unwrap_or_default();
+    if owner.is_empty() || name.is_empty() || parts.next().is_some() {
+        return Err(anyhow!("expected OWNER/REPO, got {repo:?}"));
+    }
+    Ok(())
+}
+
+fn github_app_config_template() -> String {
+    GITHUB_APP_CONFIG_TEMPLATE.to_string()
+}
+
+fn format_string_list(items: &[String]) -> String {
+    let quoted = items
+        .iter()
+        .map(|item| format!("\"{item}\""))
+        .collect::<Vec<_>>();
+    format!("[{}]", quoted.join(", "))
+}
+
+fn format_permission_map(items: &BTreeMap<String, String>) -> String {
+    let formatted = items
+        .iter()
+        .map(|(key, value)| format!("{key}={value}"))
+        .collect::<Vec<_>>();
+    format!("[{}]", formatted.join(", "))
+}
+
+fn permission_args_from_map(map: BTreeMap<String, String>) -> Vec<PermissionArg> {
+    map.into_iter()
+        .map(|(key, value)| PermissionArg { key, value })
+        .collect()
 }
 
 fn create_jwt(app_id: u64, private_key: &str) -> Result<String> {
@@ -564,9 +805,6 @@ fn cached_or_fresh_installation_token(args: &impl AppTokenConfig) -> Result<Toke
                 return Ok(TokenResponse {
                     token: cached.token,
                     expires_at: cached.expires_at,
-                    repository_selection: None,
-                    repositories: Vec::new(),
-                    permissions: BTreeMap::new(),
                 });
             }
         }
@@ -584,12 +822,21 @@ fn token_cache_key(args: &impl AppTokenConfig) -> Result<TokenCacheKey> {
     repositories.sort();
 
     Ok(TokenCacheKey {
+        config_path: cache_config_path(args.config_path()),
+        profile: args.profile_name().map(str::to_string),
         app_id: args.app_id(),
         installation_id: resolve_cache_installation_id(args)?,
         api_url: args.api_url().trim_end_matches('/').to_string(),
         repositories,
         permissions: permissions_map(args.permissions()),
     })
+}
+
+fn cache_config_path(path: &Path) -> String {
+    path.canonicalize()
+        .unwrap_or_else(|_| path.to_path_buf())
+        .to_string_lossy()
+        .into_owned()
 }
 
 fn resolve_cache_installation_id(args: &impl AppTokenConfig) -> Result<u64> {
@@ -615,16 +862,11 @@ fn token_cache_path(args: &impl AppTokenConfig) -> Result<PathBuf> {
 
 fn token_cache_dir() -> Result<PathBuf> {
     if let Some(cache_home) = env::var_os("XDG_CACHE_HOME") {
-        return Ok(PathBuf::from(cache_home)
-            .join("toolbox")
-            .join("github-app-run"));
+        return Ok(PathBuf::from(cache_home).join("ops-session"));
     }
 
     if let Some(home) = env::var_os("HOME") {
-        return Ok(PathBuf::from(home)
-            .join(".cache")
-            .join("toolbox")
-            .join("github-app-run"));
+        return Ok(PathBuf::from(home).join(".cache").join("ops-session"));
     }
 
     Err(anyhow!(
@@ -825,7 +1067,7 @@ fn auth_headers(authorization: &str) -> Result<HeaderMap> {
     let mut headers = HeaderMap::new();
     headers.insert(
         USER_AGENT,
-        HeaderValue::from_static("toolbox/github-app-auth"),
+        HeaderValue::from_static("ops-session/github-app"),
     );
     headers.insert(
         ACCEPT,
@@ -840,39 +1082,6 @@ fn auth_headers(authorization: &str) -> Result<HeaderMap> {
         HeaderValue::from_str(authorization).context("failed to build authorization header")?,
     );
     Ok(headers)
-}
-
-fn print_token(args: &AppAuthArgs, installation_id: u64, response: &TokenResponse) -> Result<()> {
-    match args.format {
-        OutputFormat::Text => println!("{}", response.token),
-        OutputFormat::Json => {
-            let repositories = json_repository_names(response, args);
-            println!(
-                "{}",
-                serde_json::to_string(&JsonTokenOutput {
-                    installation_id,
-                    repository_selection: response.repository_selection.as_deref(),
-                    repositories,
-                    permissions: &response.permissions,
-                    expires_at: response.expires_at.as_deref(),
-                })
-                .context("failed to serialize token JSON")?
-            );
-        }
-    }
-    Ok(())
-}
-
-fn print_jwt(args: &AppAuthArgs, jwt: &str) -> Result<()> {
-    match args.format {
-        OutputFormat::Text => println!("{jwt}"),
-        OutputFormat::Json => println!(
-            "{}",
-            serde_json::to_string(&JsonJwtOutput { jwt })
-                .context("failed to serialize JWT JSON")?
-        ),
-    }
-    Ok(())
 }
 
 fn run_with_installation_token(
@@ -939,7 +1148,7 @@ struct GitCredentialEnvironment {
 impl GitCredentialEnvironment {
     fn create(api_url: &str) -> Result<Self> {
         let host = git_credential_host(api_url)?;
-        let temp_dir = unique_temp_dir("toolbox-git-credentials");
+        let temp_dir = unique_temp_dir("ops-session-git-credentials");
         let mut builder = fs::DirBuilder::new();
         #[cfg(unix)]
         {
@@ -950,7 +1159,7 @@ impl GitCredentialEnvironment {
             .create(&temp_dir)
             .with_context(|| format!("failed to create {}", temp_dir.display()))?;
 
-        let helper_path = temp_dir.join("git-credential-toolbox");
+        let helper_path = temp_dir.join("git-credential-ops-session");
         fs::write(&helper_path, git_credential_helper_script(&host))
             .with_context(|| format!("failed to write {}", helper_path.display()))?;
 
@@ -1054,26 +1263,6 @@ fn token_repository_names(args: &impl AppTokenConfig) -> Vec<String> {
     repository_names(args.repos())
 }
 
-fn json_repository_names(response: &TokenResponse, args: &AppAuthArgs) -> Vec<String> {
-    let repositories: Vec<String> = response
-        .repositories
-        .iter()
-        .filter_map(|repository| {
-            repository
-                .full_name
-                .as_deref()
-                .or(repository.name.as_deref())
-                .map(str::to_string)
-        })
-        .collect();
-
-    if repositories.is_empty() {
-        token_repository_names(args)
-    } else {
-        repositories
-    }
-}
-
 fn repository_names(repositories: &[String]) -> Vec<String> {
     repositories
         .iter()
@@ -1113,23 +1302,22 @@ impl std::str::FromStr for PermissionArg {
 #[cfg(test)]
 mod tests {
     use super::{
-        git_credential_host, json_repository_names, permissions_map, repository_names,
-        token_cache_key, AppAuthArgs, OutputFormat, PermissionArg, TokenRepository, TokenResponse,
+        git_credential_host, permissions_map, repository_names, token_cache_key, PermissionArg,
+        ResolvedGithubConfig,
     };
-    use std::collections::BTreeMap;
     use std::path::PathBuf;
 
     #[test]
     fn extracts_repository_names_for_installation_token_request() {
         let repositories = vec![
-            "joonjeong/toolbox".to_string(),
+            "acme/service".to_string(),
             "plain-repo".to_string(),
             "owner/nested/name".to_string(),
         ];
 
         assert_eq!(
             repository_names(&repositories),
-            vec!["toolbox", "plain-repo", "name"]
+            vec!["service", "plain-repo", "name"]
         );
     }
 
@@ -1161,78 +1349,11 @@ mod tests {
     }
 
     #[test]
-    fn json_repository_names_prefer_github_response_metadata() {
-        let response = TokenResponse {
-            token: "token".to_string(),
-            expires_at: Some("2026-06-14T01:23:45Z".to_string()),
-            repository_selection: Some("selected".to_string()),
-            repositories: vec![
-                TokenRepository {
-                    name: Some("toolbox".to_string()),
-                    full_name: Some("joonjeong/toolbox".to_string()),
-                },
-                TokenRepository {
-                    name: Some("other".to_string()),
-                    full_name: None,
-                },
-            ],
-            permissions: BTreeMap::new(),
-        };
-        let args = test_args();
-
-        assert_eq!(
-            json_repository_names(&response, &args),
-            vec!["joonjeong/toolbox", "other"]
-        );
-    }
-
-    #[test]
-    fn json_repository_names_fall_back_to_requested_scope() {
-        let response = TokenResponse {
-            token: "token".to_string(),
-            expires_at: None,
-            repository_selection: None,
-            repositories: Vec::new(),
-            permissions: BTreeMap::new(),
-        };
-        let args = test_args();
-
-        assert_eq!(json_repository_names(&response, &args), vec!["toolbox"]);
-    }
-
-    #[test]
-    fn json_token_output_never_includes_token() {
-        let mut permissions = BTreeMap::new();
-        permissions.insert("contents".to_string(), "read".to_string());
-        let output = super::JsonTokenOutput {
-            installation_id: 123,
-            repository_selection: Some("selected"),
-            repositories: vec!["joonjeong/toolbox".to_string()],
-            permissions: &permissions,
-            expires_at: Some("2026-06-14T01:23:45Z"),
-        };
-
-        let value = serde_json::to_value(&output).expect("serializes");
-        assert_eq!(value["installation_id"], 123);
-        assert_eq!(value["repository_selection"], "selected");
-        assert_eq!(value["repositories"][0], "joonjeong/toolbox");
-        assert_eq!(value["permissions"]["contents"], "read");
-        assert_eq!(value["expires_at"], "2026-06-14T01:23:45Z");
-        assert!(value.get("token").is_none());
-    }
-
-    #[test]
     fn token_cache_key_sorts_repository_scope() {
         let mut first = test_args();
-        first.repos = vec![
-            "joonjeong/toolbox".to_string(),
-            "joonjeong/other".to_string(),
-        ];
+        first.repos = vec!["acme/service".to_string(), "joonjeong/other".to_string()];
         let mut second = test_args();
-        second.repos = vec![
-            "joonjeong/other".to_string(),
-            "joonjeong/toolbox".to_string(),
-        ];
+        second.repos = vec!["joonjeong/other".to_string(), "acme/service".to_string()];
 
         let first_key = token_cache_key(&first).expect("cache key");
         let second_key = token_cache_key(&second).expect("cache key");
@@ -1240,18 +1361,30 @@ mod tests {
         assert_eq!(first_key.repositories, second_key.repositories);
     }
 
-    fn test_args() -> AppAuthArgs {
-        AppAuthArgs {
+    #[test]
+    fn token_cache_key_includes_profile_isolation_fields() {
+        let mut first = test_args();
+        first.profile_name = Some("read".to_string());
+
+        let mut second = test_args();
+        second.profile_name = Some("write".to_string());
+
+        let first_key = token_cache_key(&first).expect("cache key");
+        let second_key = token_cache_key(&second).expect("cache key");
+
+        assert_ne!(first_key.profile, second_key.profile);
+    }
+
+    fn test_args() -> ResolvedGithubConfig {
+        ResolvedGithubConfig {
+            config_path: PathBuf::from("/tmp/github.toml"),
+            profile_name: Some("default".to_string()),
             app_id: 1,
             installation_id: Some(2),
-            private_key_file: Some(PathBuf::from("private-key.pem")),
-            private_key_path: None,
-            private_key: None,
+            private_key_path: PathBuf::from("private-key.pem"),
             api_url: "https://api.github.com".to_string(),
-            repos: vec!["joonjeong/toolbox".to_string()],
+            repos: vec!["acme/service".to_string()],
             permissions: Vec::new(),
-            format: OutputFormat::Json,
-            jwt_only: false,
         }
     }
 }

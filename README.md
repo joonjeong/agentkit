@@ -1,92 +1,71 @@
-# toolbox
+# ops tools
 
-Personal general-purpose tools packaged as Rust binaries.
+Operational tools packaged as Rust binaries.
 
 ## Shape
 
-This repository starts as a Cargo workspace so CLI/TUI tools can grow without
-having to reshape the repository later.
+This repository is a Cargo workspace for small, focused tools:
 
 ```text
 crates/
-  toolbox/       busybox-style entrypoint and shared command dispatcher
-  ops-runbook/   policy-driven restricted executor for homelab operations
+  ops-session/  GitHub App-backed command session runner
+  ops-runbook/  policy-driven restricted executor for homelab operations
 ```
 
-The primary binary is `toolbox`. Commands can be used in three forms:
+Build individual tools with Cargo:
 
 ```sh
-toolbox github app-auth ...
-toolbox github app-run ... -- COMMAND [ARG]...
-toolbox github-app-auth ...
-toolbox github-app-run ... -- COMMAND [ARG]...
-github-app-auth ... # when symlinked to the toolbox binary
-github-app-run ... # when symlinked to the toolbox binary
+cargo build --release --bin ops-session
+cargo build --release --bin ops-runbook
 ```
 
-## GitHub App authentication
+## ops-session
 
-`github app-run` is the preferred command for coding agents that need to work on
-GitHub issues or pull requests as a GitHub App installation. It creates a
-short-lived installation token, runs the child command with that token set as
-both `GH_TOKEN` and `GITHUB_TOKEN`, and avoids printing or exporting the token
-in the parent shell:
+`ops-session` runs a child command inside a short-lived GitHub App installation
+token context. For now, GitHub App authentication is the only supported session
+provider.
 
 ```sh
-toolbox github app-run \
+ops-session github-app run \
   --app-id "$GITHUB_APP_ID" \
   --repo OWNER/REPO \
-  --private-key-file /path/to/private-key.pem \
-  -- gh pr comment 123 --body "Done"
+  -- git remote update
 ```
 
-The command after `--` inherits stdin, stdout, stderr, the current working
-directory, `PATH`, and ordinary environment variables. GitHub App credential
-environment variables are removed from the child environment, so the child only
-receives the scoped installation token. Shell syntax such as pipes, redirects,
-aliases, and shell functions requires an explicit shell command:
+GitHub App credential material is read from the user-level config file
+`$XDG_CONFIG_HOME/ops-session/github.toml`, or
+`~/.config/ops-session/github.toml` when `XDG_CONFIG_HOME` is unset. Set
+`private_key_path` there; do not pass private key paths or private key contents
+through CLI arguments or environment variables.
+
+The child command receives `GH_TOKEN` and `GITHUB_TOKEN`. GitHub App credential
+environment variables are removed from the child environment. Shell syntax such
+as pipes or redirects requires an explicit shell:
 
 ```sh
-toolbox github app-run \
+ops-session github-app run \
   --app-id "$GITHUB_APP_ID" \
   --repo OWNER/REPO \
-  --private-key-file /path/to/private-key.pem \
   -- sh -c 'gh issue view 123 | jq .url'
 ```
 
-`toolbox` exits with the child process exit code, so it can be used directly in
-automation.
+Git HTTPS remotes need `--git-credentials` so the child process gets a
+temporary Git credential helper:
 
-`github app-auth` uses the same GitHub App authentication flow, but it is
-primarily a diagnostic command for debugging app-based authentication behavior:
-JWT signing, installation discovery, installation token exchange, requested
-permissions, and repository scoping. It prints the installation token to stdout
-by default, so do not use it for ordinary agent `gh` workflows.
+```sh
+ops-session github-app run \
+  --app-id "$GITHUB_APP_ID" \
+  --repo OWNER/REPO \
+  --permission contents=read \
+  --git-credentials \
+  -- git ls-remote --heads https://github.com/OWNER/REPO.git
+```
 
-Supported environment variables:
+Validate or create the GitHub App auth config with
+`ops-session github-app config check` and
+`ops-session github-app config template`.
 
-- `GITHUB_APP_ID`
-- `GITHUB_APP_INSTALLATION_ID`
-- `GITHUB_APP_PRIVATE_KEY_FILE`
-- `GITHUB_APP_PRIVATE_KEY_PATH`
-- `GITHUB_APP_PRIVATE_KEY`
-- `GITHUB_API_URL`
-
-Useful options:
-
-- `--repo OWNER/REPO` scopes the token to a repository. Repeat `--repo` for
-  multiple repositories. When `--installation-id` is omitted, the first `--repo`
-  value is also used to discover the app installation.
-- `--installation-id ID` skips repository installation discovery when the
-  installation ID is already known.
-- `--permission key=value` limits token permissions, for example
-  `--permission contents=read`.
-- `--format json` prints diagnostic metadata without the installation token.
-- `--jwt-only` prints the signed GitHub App JWT without exchanging it.
-
-Public release downloads can be tested without authentication. GitHub App auth
-must be tested against a repository where the App is installed, even if the
-repository itself is public.
+See [crates/ops-session/README.md](crates/ops-session/README.md).
 
 ## ops-runbook
 
@@ -109,107 +88,12 @@ sudo /usr/local/sbin/ops-runbook policy explain --policy-path ./policy.toml
 ops-runbook policy template --backend openrc --output ./policy.toml
 ```
 
-It reads `/etc/ops-runbook/policy.toml` by default, or
-`OPS_RUNBOOK_POLICY_PATH` when set. `policy check` and `policy explain` also
-accept `--policy-path`. `policy template` prints or writes an example policy
-file for `systemd` or `openrc`. It determines the real caller from
-`SUDO_USER`, rejects direct root execution, validates service targets, writes an
-audit log to `/var/log/ops-runbook/audit.log`, and then runs fixed
-service-manager command paths without a shell. The default backend is
-`systemd`; Alpine/OpenRC service control can be enabled with `backend =
-"openrc"` in the policy defaults.
-
-Build it with:
-
-```sh
-cargo build --release --bin ops-runbook
-```
-
-An admin can bootstrap a host directly from a downloaded or locally copied
-binary:
-
-```sh
-sudo ./ops-runbook bootstrap --user hermes
-```
-
-`bootstrap` installs the current binary to `--binary-path`, creates the group,
-updates existing users passed with `--user`, creates config/log directories,
-writes the sample policy, writes the sudoers rule, and writes logrotate config.
-Paths embedded in sudoers can be adjusted with options such as `--binary-path`,
-`--sudoers-path`, `--policy-path`, `--audit-log-path`, `--sudo-log-path`, and
-`--group`. The generated sudoers rule allows only the operational subcommands
-and does not allow `%ops-agent` to run `bootstrap`.
-
-`github app-run` uses the same token minting inputs as `app-auth`, but runs a
-command with the temporary installation token set as both `GH_TOKEN` and
-`GITHUB_TOKEN`:
-
-```sh
-toolbox github app-run \
-  --app-id "$GITHUB_APP_ID" \
-  --repo OWNER/REPO \
-  --private-key-file /path/to/private-key.pem \
-  -- gh pr comment 123 --body "Done"
-```
-
-The command after `--` inherits stdin, stdout, stderr, the current working
-directory, `PATH`, and ordinary environment variables. GitHub App credential
-environment variables are removed from the child environment, so the child only
-receives the scoped installation token. Shell syntax such as pipes, redirects,
-aliases, and shell functions requires an explicit shell command:
-
-```sh
-toolbox github app-run \
-  --app-id "$GITHUB_APP_ID" \
-  --repo OWNER/REPO \
-  --private-key-file /path/to/private-key.pem \
-  -- sh -c 'gh issue view 123 | jq .url'
-```
-
-`toolbox` exits with the child process exit code, so it can be used directly in
-automation.
-
-`app-run` caches installation tokens locally under the user cache directory
-while they remain valid. A cached token is reused only after its expiration is
-checked and GitHub accepts it for the installation; expired or rejected cache
-entries are replaced by a newly minted token.
-
-Git does not automatically use `GH_TOKEN` or `GITHUB_TOKEN` for HTTPS remotes.
-Pass `--git-credentials` when the child command needs Git HTTPS authentication:
-
-```sh
-toolbox github app-run \
-  --app-id "$GITHUB_APP_ID" \
-  --repo OWNER/REPO \
-  --permission contents=read \
-  --private-key-file /path/to/private-key.pem \
-  --git-credentials \
-  -- git ls-remote --heads https://github.com/OWNER/REPO.git
-```
-
-This installs a temporary child-only Git credential helper, disables interactive
-Git credential prompts for the child, and answers only HTTPS credential requests
-for the GitHub host.
-
-## Agent skill
-
-The `toolbox` binary bundles a `github-app-agent-workflow` skill. It describes
-how an agent can use `toolbox github app-run` with `gh` without printing,
-exporting, or persisting temporary GitHub App installation tokens.
-
-Create the bundled skill in another agent's skills directory:
-
-```sh
-toolbox github agent-skill --install-path ~/.codex/skills
-```
-
-The command writes `github-app-agent-workflow/SKILL.md` under the install path.
-Use `--force` to overwrite an existing copy.
+See [crates/ops-runbook/README.md](crates/ops-runbook/README.md).
 
 ## Releases
 
 The release workflow creates HeadVer-tagged GitHub releases and uploads
-`toolbox` binaries for `x86_64-unknown-linux-musl`,
+`ops-session` binaries for `x86_64-unknown-linux-musl`,
 `aarch64-unknown-linux-musl`, and `aarch64-apple-darwin`. Linux assets are
 statically linked musl binaries so they do not depend on the host system's
 glibc version.
@@ -228,13 +112,5 @@ HeadVer values are calculated by `scripts/headver`:
 scripts/headver --head 0 --build 123 --timezone Asia/Seoul
 ```
 
-The script emits `key=value` lines, including `version`, `tag`, and
-`asset_suffix`, so CI can append it directly to `$GITHUB_OUTPUT`.
-
-Release metadata is calculated by `scripts/release-metadata`, which wraps
-`scripts/headver` and emits the release tag, title, notes, target commit, and
-asset suffix used by `.github/workflows/release.yml`.
-
-Weekly release change detection is calculated by `scripts/weekly-release-changes`.
-It emits `should_release=false` when the target commit has no commits after the
-latest merged `v*` release tag.
+Release metadata is calculated by `scripts/release-metadata`, and weekly release
+change detection is calculated by `scripts/weekly-release-changes`.
