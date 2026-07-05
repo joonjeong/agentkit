@@ -18,7 +18,7 @@ const VERSION: &str = match option_env!("OPS_SESSION_VERSION") {
 #[command(after_long_help = "Invocation forms:
   ops-session github-app run [OPTIONS] -- COMMAND [ARG]...
   ops-session github-app config check
-  ops-session github-app config template
+  ops-session github-app config example
   ops-session agent-skill --install-path DIR
 
 For now, GitHub App authentication is the only supported session provider.")]
@@ -32,7 +32,7 @@ enum Command {
     /// GitHub App-backed operations session commands.
     #[command(name = "github-app")]
     GithubApp(github::GithubAppArgs),
-    /// Create the GitHub App agent workflow skill.
+    /// Create the ops-session agent workflow skill.
     AgentSkill(github::AppAgentWorkflowSkillArgs),
 }
 

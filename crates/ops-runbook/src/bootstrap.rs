@@ -380,8 +380,8 @@ fn logrotate_contents(audit_log_path: &Path, sudo_log_path: &Path) -> String {
 
 pub(crate) fn sample_policy(backend: Backend) -> String {
     match backend {
-        Backend::Systemd => include_str!("../resources/templates/policy.systemd.example.toml"),
-        Backend::Openrc => include_str!("../resources/templates/policy.openrc.example.toml"),
+        Backend::Systemd => include_str!("../resources/examples/policy/systemd.example.toml"),
+        Backend::Openrc => include_str!("../resources/examples/policy/openrc.example.toml"),
     }
     .to_owned()
 }

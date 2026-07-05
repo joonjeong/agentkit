@@ -19,11 +19,11 @@ use sha2::{Digest, Sha256};
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 
-const APP_AGENT_WORKFLOW_SKILL_NAME: &str = "github-app-agent-workflow";
-const APP_AGENT_WORKFLOW_SKILL: &str =
-    include_str!("../resources/skills/github-app-agent-workflow/SKILL.md");
-const GITHUB_APP_CONFIG_TEMPLATE: &str =
-    include_str!("../resources/templates/github-app-config.toml");
+const OPS_SESSION_WORKFLOW_SKILL_NAME: &str = "ops-session-workflow";
+const OPS_SESSION_WORKFLOW_SKILL: &str =
+    include_str!("../resources/skills/ops-session-workflow/SKILL.md");
+const GITHUB_APP_CONFIG_EXAMPLE: &str =
+    include_str!("../resources/examples/github-app/config.example.toml");
 const TOKEN_CACHE_EXPIRY_GRACE_SECONDS: i64 = 60;
 
 #[derive(Debug, Args)]
@@ -32,7 +32,7 @@ const TOKEN_CACHE_EXPIRY_GRACE_SECONDS: i64 = 60;
     after_long_help = "Invocation forms:
   ops-session github-app run [OPTIONS] -- COMMAND [ARG]...
   ops-session github-app config check
-  ops-session github-app config template"
+  ops-session github-app config example"
 )]
 pub struct GithubAppArgs {
     #[command(subcommand)]
@@ -43,7 +43,7 @@ pub struct GithubAppArgs {
 enum GithubAppSubcommand {
     /// Run a command through a GitHub App installation token.
     Run(GithubSessionArgs),
-    /// Validate or generate GitHub App auth config.
+    /// Validate or print GitHub App auth config examples.
     Config(GithubAuthConfigArgs),
 }
 
@@ -73,7 +73,7 @@ Environment:
   OPS_SESSION_GITHUB_PROFILE
 
 Repository scoping:
-  Use --profile NAME to select a config profile when repositories need different token permissions. Use --repo OWNER/REPO to override the selected profile's repository list. Repeat --repo for multiple repositories. When --installation-id is omitted, the first repository is also used to discover the installation. OWNER/REPO is accepted for user-facing clarity; only repository names are sent to GitHub's installation token API.
+  Use --profile NAME or OPS_SESSION_GITHUB_PROFILE to select the profile for the current agent. Use --repo OWNER/REPO to override the selected profile's repository list. Repeat --repo for multiple repositories. When --installation-id is omitted, the first repository is also used to discover the installation. OWNER/REPO is accepted for user-facing clarity; only repository names are sent to GitHub's installation token API.
 
 Execution:
   The command after -- is run directly with GH_TOKEN and GITHUB_TOKEN set to the temporary installation token. GitHub App credential environment variables are removed from the child environment. The child process inherits stdin, stdout, stderr, working directory, PATH, and other ordinary environment variables. Shell syntax such as pipes, redirects, aliases, and shell functions requires an explicit shell command, for example -- sh -c 'gh issue view 123 | jq .url'.
@@ -84,8 +84,8 @@ Git HTTPS authentication:
 pub struct GithubSessionArgs {
     /// Path to the GitHub provider config file.
     ///
-    /// Defaults to $XDG_CONFIG_HOME/ops-session/github.toml, or
-    /// ~/.config/ops-session/github.toml when XDG_CONFIG_HOME is unset.
+    /// Defaults to $XDG_CONFIG_HOME/ops-session/config.toml, or
+    /// ~/.config/ops-session/config.toml when XDG_CONFIG_HOME is unset.
     #[arg(long, env = "OPS_SESSION_GITHUB_CONFIG_PATH")]
     config_path: Option<PathBuf>,
 
@@ -111,7 +111,8 @@ pub struct GithubSessionArgs {
 
     /// Named auth profile from the config file.
     ///
-    /// Use this when different repositories need different token permissions.
+    /// Use this when multiple agents on a node need different repository scopes
+    /// or token permissions.
     #[arg(long, env = "OPS_SESSION_GITHUB_PROFILE")]
     profile: Option<String>,
 
@@ -158,7 +159,7 @@ pub struct GithubSessionArgs {
 }
 
 #[derive(Debug, Args)]
-#[command(about = "Validate or generate GitHub App auth config")]
+#[command(about = "Validate GitHub App auth config or print examples")]
 pub struct GithubAuthConfigArgs {
     #[command(subcommand)]
     command: GithubAuthConfigSubcommand,
@@ -168,23 +169,23 @@ pub struct GithubAuthConfigArgs {
 enum GithubAuthConfigSubcommand {
     /// Load and validate the GitHub App auth config file.
     Check(GithubAuthConfigCheckArgs),
-    /// Generate an example GitHub App auth config template.
-    Template(GithubAuthConfigTemplateArgs),
+    /// Print an example GitHub App auth config.
+    Example(GithubAuthConfigExampleArgs),
 }
 
 #[derive(Debug, Args)]
 struct GithubAuthConfigCheckArgs {
     /// Path to the GitHub App auth config file.
     ///
-    /// Defaults to $XDG_CONFIG_HOME/ops-session/github.toml, or
-    /// ~/.config/ops-session/github.toml when XDG_CONFIG_HOME is unset.
+    /// Defaults to $XDG_CONFIG_HOME/ops-session/config.toml, or
+    /// ~/.config/ops-session/config.toml when XDG_CONFIG_HOME is unset.
     #[arg(long, env = "OPS_SESSION_GITHUB_CONFIG_PATH")]
     config_path: Option<PathBuf>,
 }
 
 #[derive(Debug, Args)]
-struct GithubAuthConfigTemplateArgs {
-    /// Write the template to a file instead of stdout.
+struct GithubAuthConfigExampleArgs {
+    /// Write the example config to a file instead of stdout.
     #[arg(long)]
     output: Option<PathBuf>,
 
@@ -195,10 +196,10 @@ struct GithubAuthConfigTemplateArgs {
 
 #[derive(Debug, Args)]
 #[command(
-    about = "Create the GitHub App agent workflow skill",
-    long_about = "Create the bundled github-app-agent-workflow skill under a target skills directory.
+    about = "Create the ops-session agent workflow skill",
+    long_about = "Create the bundled ops-session-workflow skill under a target skills directory.
 
-The command writes INSTALL_PATH/github-app-agent-workflow/SKILL.md. Use it to install the agent-facing workflow guidance next to Codex, Hermes, or another agent's skill directory without copying files manually.",
+The command writes INSTALL_PATH/ops-session-workflow/SKILL.md. Use it to install the agent-facing workflow guidance next to Codex, Hermes, or another agent's skill directory without copying files manually.",
     after_long_help = "Examples:
   ops-session agent-skill --install-path ~/.codex/skills
   ops-session agent-skill -i ./skills --force
@@ -209,7 +210,7 @@ Output:
 pub struct AppAgentWorkflowSkillArgs {
     /// Directory where the skill folder should be created.
     ///
-    /// The command creates <INSTALL_PATH>/github-app-agent-workflow/SKILL.md.
+    /// The command creates <INSTALL_PATH>/ops-session-workflow/SKILL.md.
     #[arg(long, short = 'i', value_name = "INSTALL_PATH")]
     install_path: PathBuf,
 
@@ -268,6 +269,11 @@ struct PermissionArg {
 }
 
 #[derive(Debug, Deserialize, Default)]
+struct OpsSessionConfigFile {
+    github_app: Option<GithubConfigFile>,
+}
+
+#[derive(Debug, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 struct GithubConfigFile {
     app_id: Option<u64>,
@@ -276,13 +282,12 @@ struct GithubConfigFile {
     api_url: Option<String>,
     default_profile: Option<String>,
     #[serde(default)]
-    profiles: Vec<GithubConfigProfile>,
+    profiles: BTreeMap<String, GithubConfigProfile>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct GithubConfigProfile {
-    name: String,
     installation_id: Option<u64>,
     #[serde(default)]
     repos: Vec<String>,
@@ -413,7 +418,7 @@ pub fn github_session(args: GithubSessionArgs) -> Result<()> {
 pub fn github_auth_config(args: GithubAuthConfigArgs) -> Result<()> {
     match args.command {
         GithubAuthConfigSubcommand::Check(args) => check_github_auth_config(args),
-        GithubAuthConfigSubcommand::Template(args) => template_github_auth_config(args),
+        GithubAuthConfigSubcommand::Example(args) => example_github_auth_config(args),
     }
 }
 
@@ -442,8 +447,8 @@ fn check_github_auth_config(args: GithubAuthConfigCheckArgs) -> Result<()> {
         println!("default_profile: {default_profile}");
     }
     println!("profiles:");
-    for profile in file.profiles {
-        println!("  {}:", profile.name);
+    for (name, profile) in file.profiles {
+        println!("  {name}:");
         if let Some(installation_id) = profile.installation_id {
             println!("    installation_id: {installation_id}");
         }
@@ -457,10 +462,10 @@ fn check_github_auth_config(args: GithubAuthConfigCheckArgs) -> Result<()> {
     Ok(())
 }
 
-fn template_github_auth_config(args: GithubAuthConfigTemplateArgs) -> Result<()> {
-    let template = github_app_config_template();
+fn example_github_auth_config(args: GithubAuthConfigExampleArgs) -> Result<()> {
+    let example = github_app_config_example();
     let Some(output) = args.output else {
-        print!("{template}");
+        print!("{example}");
         return Ok(());
     };
 
@@ -468,13 +473,12 @@ fn template_github_auth_config(args: GithubAuthConfigTemplateArgs) -> Result<()>
         return Err(anyhow!("output already exists: {}", output.display()));
     }
 
-    fs::write(&output, template)
-        .with_context(|| format!("failed to write {}", output.display()))?;
+    fs::write(&output, example).with_context(|| format!("failed to write {}", output.display()))?;
     Ok(())
 }
 
 pub fn create_app_agent_workflow_skill(args: AppAgentWorkflowSkillArgs) -> Result<()> {
-    let skill_dir = args.install_path.join(APP_AGENT_WORKFLOW_SKILL_NAME);
+    let skill_dir = args.install_path.join(OPS_SESSION_WORKFLOW_SKILL_NAME);
     let skill_file = skill_dir.join("SKILL.md");
 
     if skill_file.exists() && !args.force {
@@ -486,7 +490,7 @@ pub fn create_app_agent_workflow_skill(args: AppAgentWorkflowSkillArgs) -> Resul
 
     fs::create_dir_all(&skill_dir)
         .with_context(|| format!("failed to create {}", skill_dir.display()))?;
-    fs::write(&skill_file, APP_AGENT_WORKFLOW_SKILL)
+    fs::write(&skill_file, OPS_SESSION_WORKFLOW_SKILL)
         .with_context(|| format!("failed to write {}", skill_file.display()))?;
 
     println!("{}", skill_dir.display());
@@ -507,14 +511,14 @@ fn resolve_github_config(args: &impl GithubConfigArgs) -> Result<ResolvedGithubC
     let selected_profile = select_github_config_profile(&file, args, &config_path)?;
     let permissions = if args.permissions().is_empty() {
         selected_profile
-            .map(|profile| permission_args_from_map(profile.permissions.clone()))
+            .map(|(_, profile)| permission_args_from_map(profile.permissions.clone()))
             .unwrap_or_default()
     } else {
         args.permissions().to_vec()
     };
     let repos = if args.repos().is_empty() {
         selected_profile
-            .map(|profile| profile.repos.clone())
+            .map(|(_, profile)| profile.repos.clone())
             .unwrap_or_default()
     } else {
         args.repos().to_vec()
@@ -522,7 +526,7 @@ fn resolve_github_config(args: &impl GithubConfigArgs) -> Result<ResolvedGithubC
 
     Ok(ResolvedGithubConfig {
         config_path: config_path.clone(),
-        profile_name: selected_profile.map(|profile| profile.name.clone()),
+        profile_name: selected_profile.map(|(name, _)| name.to_string()),
         app_id: args.app_id().or(file.app_id).ok_or_else(|| {
             anyhow!(
                 "missing GitHub App ID; set --app-id, GITHUB_APP_ID, or app_id in {}",
@@ -531,7 +535,7 @@ fn resolve_github_config(args: &impl GithubConfigArgs) -> Result<ResolvedGithubC
         })?,
         installation_id: args
             .installation_id()
-            .or_else(|| selected_profile.and_then(|profile| profile.installation_id))
+            .or_else(|| selected_profile.and_then(|(_, profile)| profile.installation_id))
             .or(file.installation_id),
         private_key_path: file.private_key_path.ok_or_else(|| {
             anyhow!(
@@ -553,13 +557,12 @@ fn select_github_config_profile<'a>(
     file: &'a GithubConfigFile,
     args: &impl GithubConfigArgs,
     path: &Path,
-) -> Result<Option<&'a GithubConfigProfile>> {
+) -> Result<Option<(&'a str, &'a GithubConfigProfile)>> {
     if let Some(profile_name) = args.profile() {
         return file
             .profiles
-            .iter()
-            .find(|profile| profile.name == profile_name)
-            .map(Some)
+            .get_key_value(profile_name)
+            .map(|(name, profile)| Some((name.as_str(), profile)))
             .ok_or_else(|| {
                 anyhow!(
                     "unknown GitHub auth config profile {profile_name:?} in {}",
@@ -571,9 +574,8 @@ fn select_github_config_profile<'a>(
     if let Some(default_profile) = &file.default_profile {
         return file
             .profiles
-            .iter()
-            .find(|profile| profile.name == *default_profile)
-            .map(Some)
+            .get_key_value(default_profile)
+            .map(|(name, profile)| Some((name.as_str(), profile)))
             .ok_or_else(|| {
                 anyhow!(
                     "default_profile {default_profile:?} is not defined in {}",
@@ -583,7 +585,11 @@ fn select_github_config_profile<'a>(
     }
 
     if file.profiles.len() == 1 {
-        return Ok(file.profiles.first());
+        return Ok(file
+            .profiles
+            .iter()
+            .next()
+            .map(|(name, profile)| (name.as_str(), profile)));
     }
 
     if file.profiles.len() > 1 && args.repos().is_empty() {
@@ -603,13 +609,13 @@ fn github_config_path(path: Option<&PathBuf>) -> Result<PathBuf> {
     if let Some(config_home) = env::var_os("XDG_CONFIG_HOME") {
         return Ok(PathBuf::from(config_home)
             .join("ops-session")
-            .join("github.toml"));
+            .join("config.toml"));
     }
     if let Some(home) = env::var_os("HOME") {
         return Ok(PathBuf::from(home)
             .join(".config")
             .join("ops-session")
-            .join("github.toml"));
+            .join("config.toml"));
     }
     Err(anyhow!(
         "cannot determine GitHub config path; set --config-path, OPS_SESSION_GITHUB_CONFIG_PATH, XDG_CONFIG_HOME, or HOME"
@@ -618,8 +624,7 @@ fn github_config_path(path: Option<&PathBuf>) -> Result<PathBuf> {
 
 fn read_github_config(path: &PathBuf) -> Result<GithubConfigFile> {
     match fs::read_to_string(path) {
-        Ok(contents) => toml::from_str(&contents)
-            .with_context(|| format!("failed to parse GitHub config {}", path.display())),
+        Ok(contents) => parse_github_config(&contents, path),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             Ok(GithubConfigFile::default())
         }
@@ -632,13 +637,21 @@ fn read_github_config(path: &PathBuf) -> Result<GithubConfigFile> {
 fn read_required_github_config(path: &Path) -> Result<GithubConfigFile> {
     let contents = fs::read_to_string(path)
         .with_context(|| format!("failed to read GitHub config {}", path.display()))?;
-    toml::from_str(&contents)
-        .with_context(|| format!("failed to parse GitHub config {}", path.display()))
+    parse_github_config(&contents, path)
+}
+
+fn parse_github_config(contents: &str, path: &Path) -> Result<GithubConfigFile> {
+    let file: OpsSessionConfigFile = toml::from_str(contents)
+        .with_context(|| format!("failed to parse ops-session config {}", path.display()))?;
+    file.github_app.ok_or_else(|| {
+        anyhow!(
+            "missing [github_app] section in ops-session config {}",
+            path.display()
+        )
+    })
 }
 
 fn validate_github_config_file(file: &GithubConfigFile, path: &Path) -> Result<()> {
-    let mut profile_names = BTreeMap::<&str, usize>::new();
-
     if file.app_id.is_none() {
         return Err(anyhow!(
             "missing app_id in GitHub config file {}",
@@ -677,19 +690,18 @@ fn validate_github_config_file(file: &GithubConfigFile, path: &Path) -> Result<(
         ));
     }
 
-    for profile in &file.profiles {
-        if profile.name.is_empty() {
+    for (name, profile) in &file.profiles {
+        if name.is_empty() {
             return Err(anyhow!(
                 "profile name must not be empty in GitHub config file {}",
                 path.display()
             ));
         }
-        *profile_names.entry(profile.name.as_str()).or_default() += 1;
 
         if profile.repos.is_empty() {
             return Err(anyhow!(
                 "profile {:?} must include at least one repo in GitHub config file {}",
-                profile.name,
+                name,
                 path.display()
             ));
         }
@@ -704,23 +716,15 @@ fn validate_github_config_file(file: &GithubConfigFile, path: &Path) -> Result<(
             if key.is_empty() || value.is_empty() {
                 return Err(anyhow!(
                     "profile {:?} permissions must use non-empty key/value entries in GitHub config file {}",
-                    profile.name,
+                    name,
                     path.display()
                 ));
             }
         }
     }
 
-    if let Some((name, _)) = profile_names.iter().find(|(_, count)| **count > 1) {
-        return Err(anyhow!(
-            "duplicate profile {:?} in GitHub config file {}",
-            name,
-            path.display()
-        ));
-    }
-
     if let Some(default_profile) = &file.default_profile {
-        if !profile_names.contains_key(default_profile.as_str()) {
+        if !file.profiles.contains_key(default_profile) {
             return Err(anyhow!(
                 "default_profile {:?} is not defined in GitHub config file {}",
                 default_profile,
@@ -742,8 +746,8 @@ fn validate_repo_scope(repo: &str) -> Result<()> {
     Ok(())
 }
 
-fn github_app_config_template() -> String {
-    GITHUB_APP_CONFIG_TEMPLATE.to_string()
+fn github_app_config_example() -> String {
+    GITHUB_APP_CONFIG_EXAMPLE.to_string()
 }
 
 fn format_string_list(items: &[String]) -> String {
@@ -1377,7 +1381,7 @@ mod tests {
 
     fn test_args() -> ResolvedGithubConfig {
         ResolvedGithubConfig {
-            config_path: PathBuf::from("/tmp/github.toml"),
+            config_path: PathBuf::from("/tmp/config.toml"),
             profile_name: Some("default".to_string()),
             app_id: 1,
             installation_id: Some(2),

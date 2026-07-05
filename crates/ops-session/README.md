@@ -11,31 +11,49 @@ ops-session github-app run \
 ```
 
 GitHub credentials are read from a config file. The default path is
-`$XDG_CONFIG_HOME/ops-session/github.toml`, or
-`~/.config/ops-session/github.toml` when `XDG_CONFIG_HOME` is unset. Override it
+`$XDG_CONFIG_HOME/ops-session/config.toml`, or
+`~/.config/ops-session/config.toml` when `XDG_CONFIG_HOME` is unset. Override it
 with `--config-path` or `OPS_SESSION_GITHUB_CONFIG_PATH`.
+The top level of this file may contain multiple provider sections; GitHub App
+settings live under `[github_app]`.
 
 ```toml
+[github_app]
 app_id = 123456
 private_key_path = "/home/me/.config/ops-session/github-app.private-key.pem"
 api_url = "https://api.github.com"
-default_profile = "repo-read"
+default_profile = "codex-review"
 
-[[profiles]]
-name = "repo-read"
+[github_app.profiles.codex-review]
 repos = ["OWNER/REPO"]
 
-[profiles.permissions]
+[github_app.profiles.codex-review.permissions]
 contents = "read"
+pull_requests = "read"
+
+[github_app.profiles.codex-maintainer]
+repos = ["OWNER/REPO"]
+
+[github_app.profiles.codex-maintainer.permissions]
+contents = "write"
+pull_requests = "write"
 ```
 
-`app_id`, `installation_id`, `api_url`, `default_profile`, and `profiles` can be set
-in the config file. Each profile owns its `repos` and `permissions`, so different
-repositories can use different installation token permissions. `--profile`,
-`OPS_SESSION_GITHUB_PROFILE`, `--app-id`, `GITHUB_APP_ID`, `--installation-id`,
-`GITHUB_APP_INSTALLATION_ID`, `--api-url`, `GITHUB_API_URL`, `--repo`, and
-`--permission` override non-secret config values. The private key path is only
-read from `private_key_path` in the config file; use an absolute path.
+`app_id`, `installation_id`, `api_url`, `default_profile`, and `profiles` are
+set under `[github_app]`. Profiles are map entries keyed by profile name, so
+`[github_app.profiles.codex-review]` defines the `codex-review` profile. On a
+node that runs multiple agents, give each agent a distinct profile and set
+`OPS_SESSION_GITHUB_PROFILE` in that agent's service environment. Each profile
+owns its `repos`, optional `installation_id`, and `permissions`, so agents can
+share the same GitHub App credentials without sharing repository scope or token
+permissions. `--profile`, `OPS_SESSION_GITHUB_PROFILE`, `--app-id`,
+`GITHUB_APP_ID`, `--installation-id`, `GITHUB_APP_INSTALLATION_ID`, `--api-url`,
+`GITHUB_API_URL`, `--repo`, and `--permission` override non-secret config
+values. The private key path is only read from `github_app.private_key_path` in
+the config file; use an absolute path.
+Unknown top-level provider sections are ignored by the GitHub App commands, but
+unknown fields inside `[github_app]` are rejected so GitHub configuration typos
+fail fast.
 
 The child command inherits stdin, stdout, stderr, the current working directory,
 `PATH`, and ordinary environment variables. The scoped installation token is
@@ -45,7 +63,8 @@ Useful options:
 
 - `--repo OWNER/REPO` scopes the token to a repository. Repeat `--repo` for
   multiple repositories.
-- `--profile NAME` selects a named config profile.
+- `--profile NAME` selects a named config profile. Prefer
+  `OPS_SESSION_GITHUB_PROFILE` for long-running agent services.
 - `--permission key=value` limits token permissions, for example
   `--permission contents=read`.
 - `--git-credentials` configures a child-only Git credential helper for HTTPS
@@ -54,8 +73,8 @@ Useful options:
 
 Token caching is disabled by default. When enabled, cache keys include the config
 path, selected profile, app, installation, API URL, repository list, and
-permissions. Use separate config profiles when two agent profiles share a Unix
-account but must not share cached tokens.
+permissions. This keeps cached tokens isolated between agent profiles on the
+same Unix account.
 
 Shell syntax such as pipes, redirects, aliases, and shell functions requires an
 explicit shell command:
@@ -75,4 +94,4 @@ Validate the GitHub App auth config when needed:
 ops-session github-app config check
 ```
 
-Generate a starting config with `ops-session github-app config template`.
+Print an example config with `ops-session github-app config example`.

@@ -95,9 +95,9 @@ fn github_app_config_check_reads_default_user_config_path() {
     let private_key_path = ops_session_config_dir.join("private-key.pem");
     fs::write(&private_key_path, TEST_RSA_PRIVATE_KEY).expect("private key written");
     fs::write(
-        ops_session_config_dir.join("github.toml"),
+        ops_session_config_dir.join("config.toml"),
         format!(
-            "app_id = 1\nprivate_key_path = \"{}\"\ndefault_profile = \"default\"\n[[profiles]]\nname = \"default\"\nrepos = [\"OWNER/REPO\"]\n",
+            "[github_app]\napp_id = 1\nprivate_key_path = \"{}\"\ndefault_profile = \"default\"\n\n[github_app.profiles.default]\nrepos = [\"OWNER/REPO\"]\n",
             private_key_path.to_string_lossy()
         ),
     )
@@ -114,11 +114,11 @@ fn github_app_config_check_reads_default_user_config_path() {
 }
 
 #[test]
-fn github_app_config_template_prints_user_level_config() {
-    let config_home = unique_temp_dir("ops-session-config-template-test");
+fn github_app_config_example_prints_user_level_config() {
+    let config_home = unique_temp_dir("ops-session-config-example-test");
     let mut cmd = Command::cargo_bin("ops-session").expect("binary exists");
 
-    cmd.args(["github-app", "config", "template"])
+    cmd.args(["github-app", "config", "example"])
         .env("XDG_CONFIG_HOME", &config_home)
         .assert()
         .success()
@@ -128,24 +128,26 @@ fn github_app_config_template_prints_user_level_config() {
                 .and(predicate::str::contains(
                     "/home/me/.config/ops-session/github-app.private-key.pem",
                 ))
-                .and(predicate::str::contains("[profiles.permissions]")),
+                .and(predicate::str::contains(
+                    "[github_app.profiles.codex-review.permissions]",
+                )),
         );
 
     fs::remove_dir_all(config_home).ok();
 }
 
 #[test]
-fn github_app_config_template_refuses_to_overwrite_without_force() {
-    let output_dir = unique_temp_dir("ops-session-config-template-test");
+fn github_app_config_example_refuses_to_overwrite_without_force() {
+    let output_dir = unique_temp_dir("ops-session-config-example-test");
     fs::create_dir(&output_dir).expect("output dir created");
-    let output = output_dir.join("github.toml");
+    let output = output_dir.join("config.toml");
     fs::write(&output, "existing").expect("output written");
     let mut cmd = Command::cargo_bin("ops-session").expect("binary exists");
 
     cmd.args([
         "github-app",
         "config",
-        "template",
+        "example",
         "--output",
         output.to_str().expect("utf-8 path"),
     ])
@@ -162,11 +164,11 @@ fn github_app_config_check_accepts_valid_config() {
     fs::create_dir(&config_dir).expect("config dir created");
     let private_key_path = config_dir.join("private-key.pem");
     fs::write(&private_key_path, TEST_RSA_PRIVATE_KEY).expect("private key written");
-    let config_path = config_dir.join("github.toml");
+    let config_path = config_dir.join("config.toml");
     fs::write(
         &config_path,
         format!(
-            "app_id = 1\nprivate_key_path = \"{}\"\ndefault_profile = \"read\"\n[[profiles]]\nname = \"read\"\nrepos = [\"OWNER/REPO\"]\n[profiles.permissions]\ncontents = \"read\"\n[[profiles]]\nname = \"write\"\nrepos = [\"OWNER/OTHER\"]\n[profiles.permissions]\ncontents = \"write\"\n",
+            "[github_app]\napp_id = 1\nprivate_key_path = \"{}\"\ndefault_profile = \"read\"\n\n[github_app.profiles.read]\nrepos = [\"OWNER/REPO\"]\n\n[github_app.profiles.read.permissions]\ncontents = \"read\"\n\n[github_app.profiles.write]\nrepos = [\"OWNER/OTHER\"]\n\n[github_app.profiles.write.permissions]\ncontents = \"write\"\n",
             private_key_path.to_string_lossy()
         ),
     )
@@ -189,16 +191,42 @@ fn github_app_config_check_accepts_valid_config() {
 }
 
 #[test]
+fn github_app_config_check_allows_other_provider_sections() {
+    let config_dir = unique_temp_dir("ops-session-config-check-test");
+    fs::create_dir(&config_dir).expect("config dir created");
+    let private_key_path = config_dir.join("private-key.pem");
+    fs::write(&private_key_path, TEST_RSA_PRIVATE_KEY).expect("private key written");
+    let config_path = config_dir.join("config.toml");
+    fs::write(
+        &config_path,
+        format!(
+            "[github_app]\napp_id = 1\nprivate_key_path = \"{}\"\ndefault_profile = \"read\"\n\n[github_app.profiles.read]\nrepos = [\"OWNER/REPO\"]\n\n[other_provider]\nenabled = true\n",
+            private_key_path.to_string_lossy()
+        ),
+    )
+    .expect("config written");
+    let mut cmd = Command::cargo_bin("ops-session").expect("binary exists");
+
+    cmd.args(["github-app", "config", "check", "--config-path"])
+        .arg(&config_path)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("config OK"));
+
+    fs::remove_dir_all(config_dir).expect("config dir removed");
+}
+
+#[test]
 fn github_app_config_check_rejects_invalid_repo_scope() {
     let config_dir = unique_temp_dir("ops-session-config-check-test");
     fs::create_dir(&config_dir).expect("config dir created");
     let private_key_path = config_dir.join("private-key.pem");
     fs::write(&private_key_path, TEST_RSA_PRIVATE_KEY).expect("private key written");
-    let config_path = config_dir.join("github.toml");
+    let config_path = config_dir.join("config.toml");
     fs::write(
         &config_path,
         format!(
-            "app_id = 1\nprivate_key_path = \"{}\"\n[[profiles]]\nname = \"bad\"\nrepos = [\"OWNER/REPO/EXTRA\"]\n",
+            "[github_app]\napp_id = 1\nprivate_key_path = \"{}\"\n\n[github_app.profiles.bad]\nrepos = [\"OWNER/REPO/EXTRA\"]\n",
             private_key_path.to_string_lossy()
         ),
     )
@@ -349,11 +377,11 @@ fn ops_session_uses_named_config_profile() {
     fs::create_dir(&config_dir).expect("config dir created");
     let private_key_path = config_dir.join("private-key.pem");
     fs::write(&private_key_path, TEST_RSA_PRIVATE_KEY).expect("private key written");
-    let config_path = config_dir.join("github.toml");
+    let config_path = config_dir.join("config.toml");
     fs::write(
         &config_path,
         format!(
-            "app_id = 1\ninstallation_id = 42\nprivate_key_path = \"{}\"\n[[profiles]]\nname = \"read\"\nrepos = [\"OWNER/REPO\"]\n[profiles.permissions]\ncontents = \"read\"\n[[profiles]]\nname = \"write\"\nrepos = [\"OWNER/OTHER\"]\n[profiles.permissions]\ncontents = \"write\"\n",
+            "[github_app]\napp_id = 1\ninstallation_id = 42\nprivate_key_path = \"{}\"\n\n[github_app.profiles.read]\nrepos = [\"OWNER/REPO\"]\n\n[github_app.profiles.read.permissions]\ncontents = \"read\"\n\n[github_app.profiles.write]\nrepos = [\"OWNER/OTHER\"]\n\n[github_app.profiles.write.permissions]\ncontents = \"write\"\n",
             private_key_path.to_string_lossy()
         ),
     )
@@ -571,8 +599,12 @@ fn ops_session_accepts_command_options_after_separator() {
     let mut cmd = Command::cargo_bin("ops-session").expect("binary exists");
     let config_dir = unique_temp_dir("ops-session-config-test");
     fs::create_dir(&config_dir).expect("config dir created");
-    let config_path = config_dir.join("github.toml");
-    fs::write(&config_path, "private_key_path = \"/not/a/key.pem\"\n").expect("config written");
+    let config_path = config_dir.join("config.toml");
+    fs::write(
+        &config_path,
+        "[github_app]\nprivate_key_path = \"/not/a/key.pem\"\n",
+    )
+    .expect("config written");
 
     cmd.args([
         "github-app",
@@ -610,16 +642,16 @@ fn creates_github_app_agent_workflow_skill() {
     ])
     .assert()
     .success()
-    .stdout(predicate::str::contains("github-app-agent-workflow"));
+    .stdout(predicate::str::contains("ops-session-workflow"));
 
-    let skill_file = skills_dir
-        .join("github-app-agent-workflow")
-        .join("SKILL.md");
+    let skill_file = skills_dir.join("ops-session-workflow").join("SKILL.md");
     let skill = fs::read_to_string(&skill_file).expect("skill file exists");
-    assert!(skill.contains("name: github-app-agent-workflow"));
+    assert!(skill.contains("name: ops-session-workflow"));
     assert!(skill.contains("ops-session github-app run"));
     assert!(skill.contains("ops-session github-app config check"));
-    assert!(skill.contains("user-level config file"));
+    assert!(skill.contains("provider-scoped session runner"));
+    assert!(skill.contains("[github_app.profiles.codex-review]"));
+    assert!(skill.contains("OPS_SESSION_GITHUB_PROFILE"));
 
     fs::remove_dir_all(skills_dir).expect("temporary skill directory removed");
 }
@@ -668,7 +700,7 @@ fn refuses_to_overwrite_existing_skill_without_force() {
         .success();
 
     assert!(skills_dir
-        .join("github-app-agent-workflow")
+        .join("ops-session-workflow")
         .join("SKILL.md")
         .exists());
 
@@ -691,11 +723,11 @@ fn write_github_config(prefix: &str) -> (std::path::PathBuf, std::path::PathBuf)
     fs::create_dir(&config_dir).expect("config dir created");
     let private_key_path = config_dir.join("private-key.pem");
     fs::write(&private_key_path, TEST_RSA_PRIVATE_KEY).expect("private key written");
-    let config_path = config_dir.join("github.toml");
+    let config_path = config_dir.join("config.toml");
     fs::write(
         &config_path,
         format!(
-            "private_key_path = \"{}\"\ndefault_profile = \"default\"\n[[profiles]]\nname = \"default\"\nrepos = [\"OWNER/REPO\"]\n[profiles.permissions]\ncontents = \"read\"\n",
+            "[github_app]\nprivate_key_path = \"{}\"\ndefault_profile = \"default\"\n\n[github_app.profiles.default]\nrepos = [\"OWNER/REPO\"]\n\n[github_app.profiles.default.permissions]\ncontents = \"read\"\n",
             private_key_path.to_string_lossy()
         ),
     )
