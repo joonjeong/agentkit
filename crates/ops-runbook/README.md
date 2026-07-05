@@ -46,7 +46,9 @@ generated sudoers rule.
 
 `bootstrap` installs the current executable to `/usr/local/sbin/ops-runbook`,
 creates the `ops-agent` group, adds existing `--user` accounts to the group,
-writes the default policy, writes sudoers, and writes logrotate config.
+writes the default policy, writes sudoers, and writes logrotate config. The
+sudoers rule is rendered from
+`crates/ops-runbook/resources/templates/sudoers.ops-agent.template`.
 
 The generated sudoers rule grants only:
 

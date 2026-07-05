@@ -595,5 +595,5 @@ fn write_recorder(dir: &Path, name: &str) -> PathBuf {
     path
 }
 
-const SAMPLE_POLICY: &str = include_str!("../configs/policy.systemd.example.toml");
-const OPENRC_POLICY: &str = include_str!("../configs/policy.openrc.example.toml");
+const SAMPLE_POLICY: &str = include_str!("../resources/templates/policy.systemd.example.toml");
+const OPENRC_POLICY: &str = include_str!("../resources/templates/policy.openrc.example.toml");

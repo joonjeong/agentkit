@@ -15,6 +15,7 @@ const DEFAULT_GROUP: &str = "ops-agent";
 const DEFAULT_LOGROTATE_PATH: &str = "/etc/logrotate.d/ops-runbook";
 const DEFAULT_SUDOERS_PATH: &str = "/etc/sudoers.d/ops-agent";
 const DEFAULT_SUDO_LOG_PATH: &str = "/var/log/ops-runbook/sudo.log";
+const SUDOERS_TEMPLATE: &str = include_str!("../resources/templates/sudoers.ops-agent.template");
 
 #[derive(Debug, Args)]
 pub struct BootstrapArgs {
@@ -355,16 +356,10 @@ fn sudoers_contents(args: &BootstrapArgs) -> String {
     let binary = args.binary_path.display();
     let sudo_log = args.sudo_log_path.display();
 
-    format!(
-        r#"Defaults:%{group} !requiretty
-Defaults:%{group} secure_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-Defaults:%{group} env_reset
-Defaults:%{group} log_output
-Defaults:%{group} logfile="{sudo_log}"
-
-%{group} ALL=(root) NOPASSWD: {binary} service start *, {binary} service stop *, {binary} service restart *, {binary} service reload *, {binary} service status *, {binary} logs *, {binary} policy check, {binary} policy check *, {binary} policy explain, {binary} policy explain *, {binary} version
-"#
-    )
+    SUDOERS_TEMPLATE
+        .replace("{group}", group)
+        .replace("{binary}", &binary.to_string())
+        .replace("{sudo_log}", &sudo_log.to_string())
 }
 
 fn logrotate_contents(audit_log_path: &Path, sudo_log_path: &Path) -> String {
@@ -385,8 +380,8 @@ fn logrotate_contents(audit_log_path: &Path, sudo_log_path: &Path) -> String {
 
 pub(crate) fn sample_policy(backend: Backend) -> String {
     match backend {
-        Backend::Systemd => include_str!("../configs/policy.systemd.example.toml"),
-        Backend::Openrc => include_str!("../configs/policy.openrc.example.toml"),
+        Backend::Systemd => include_str!("../resources/templates/policy.systemd.example.toml"),
+        Backend::Openrc => include_str!("../resources/templates/policy.openrc.example.toml"),
     }
     .to_owned()
 }

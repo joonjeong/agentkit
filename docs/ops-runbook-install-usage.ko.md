@@ -28,7 +28,8 @@ sudo ./ops-runbook bootstrap --user hermes
 - `/etc/logrotate.d/ops-runbook` 생성
 
 생성되는 sudoers 규칙은 `ops-agent` 멤버에게 운영 서브커맨드만 허용합니다.
-에이전트가 `bootstrap`을 실행할 수는 없습니다.
+에이전트가 `bootstrap`을 실행할 수는 없습니다. 이 규칙은
+`crates/ops-runbook/resources/templates/sudoers.ops-agent.template`에서 렌더링됩니다.
 
 ## 빌드
 

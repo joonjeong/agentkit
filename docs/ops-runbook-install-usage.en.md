@@ -28,7 +28,8 @@ sudo ./ops-runbook bootstrap --user hermes
 - writes `/etc/logrotate.d/ops-runbook`
 
 The generated sudoers rule allows `ops-agent` members to run only the operational
-subcommands. It does not allow agents to run `bootstrap`.
+subcommands. It does not allow agents to run `bootstrap`. The rule is rendered
+from `crates/ops-runbook/resources/templates/sudoers.ops-agent.template`.
 
 ## Build
 

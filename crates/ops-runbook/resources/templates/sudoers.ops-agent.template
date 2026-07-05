@@ -1,0 +1,7 @@
+Defaults:%{group} !requiretty
+Defaults:%{group} secure_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+Defaults:%{group} env_reset
+Defaults:%{group} log_output
+Defaults:%{group} logfile="{sudo_log}"
+
+%{group} ALL=(root) NOPASSWD: {binary} service start *, {binary} service stop *, {binary} service restart *, {binary} service reload *, {binary} service status *, {binary} logs *, {binary} policy check, {binary} policy check *, {binary} policy explain, {binary} policy explain *, {binary} version
