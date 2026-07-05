@@ -92,7 +92,7 @@ See [crates/ops-runbook/README.md](crates/ops-runbook/README.md).
 
 ## Releases
 
-The release workflow creates HeadVer-tagged GitHub releases and uploads
+The release workflow creates HeadVer-tagged GitHub releases with
 `ops-session` binaries for `x86_64-unknown-linux-musl`,
 `aarch64-unknown-linux-musl`, and `aarch64-apple-darwin`. Linux assets are
 statically linked musl binaries so they do not depend on the host system's
@@ -102,9 +102,9 @@ The weekly release workflow runs every Sunday at 10:00 KST and creates a
 [HeadVer](https://github.com/line/headver) release from the default branch. Until
 the project is ready for a stable head value, automated releases use head `0` in
 the form `v0.<yearweek>.<build>`. The weekly workflow only calculates the
-HeadVer tag and delegates release creation, builds, and asset uploads to the
-release workflow. If there are no commits after the latest merged `v*` release
-tag, the weekly workflow skips the release.
+HeadVer tag and delegates builds and immutable-compatible release publishing to
+the release workflow. If there are no commits after the latest merged `v*`
+release tag, the weekly workflow skips the release.
 
 HeadVer values are calculated by `scripts/headver`:
 
