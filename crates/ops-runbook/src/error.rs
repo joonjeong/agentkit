@@ -25,8 +25,8 @@ pub enum Error {
     #[error("invalid bootstrap option: {0}")]
     InvalidBootstrapOption(String),
 
-    #[error("invalid policy option: {0}")]
-    InvalidPolicyOption(String),
+    #[error("invalid config option: {0}")]
+    InvalidConfigOption(String),
 
     #[error("invalid notification option: {0}")]
     InvalidNotificationOption(String),
@@ -49,8 +49,8 @@ pub enum Error {
         action: &'static str,
     },
 
-    #[error("unsupported policy version: {0}")]
-    UnsupportedPolicyVersion(u32),
+    #[error("unsupported config version: {0}")]
+    UnsupportedConfigVersion(u32),
 
     #[error("config error in {path}: {source}")]
     Config {
