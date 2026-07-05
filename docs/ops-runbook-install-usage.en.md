@@ -1,6 +1,6 @@
 # ops-runbook Installation and Usage
 
-`ops-runbook` is a policy-driven restricted executor for homelab operations.
+`ops-runbook` is a config-driven restricted executor for homelab operations.
 It lets automation agents run a narrow set of root operations through sudo,
 without granting raw shell, `systemctl`, `apt`, Docker socket, or Ansible access.
 
@@ -22,7 +22,7 @@ sudo ./ops-runbook bootstrap --user hermes
 - installs the current binary to `/usr/local/sbin/ops-runbook`
 - creates the `ops-agent` system group when missing
 - adds existing `--user` accounts to `ops-agent`
-- creates `/etc/ops-runbook/policy.toml` when missing
+- creates `/etc/ops-runbook/config.toml` when missing
 - writes `/etc/sudoers.d/ops-agent`
 - creates log paths under `/var/log/ops-runbook`
 - writes `/etc/logrotate.d/ops-runbook`
@@ -62,18 +62,18 @@ sudo ./ops-runbook bootstrap \
   --backend systemd \
   --group ops-agent \
   --sudoers-path /etc/sudoers.d/ops-agent \
-  --policy-path /etc/ops-runbook/policy.toml \
+  --config-path /etc/ops-runbook/config.toml \
   --audit-log-path /var/log/ops-runbook/audit.log \
   --sudo-log-path /var/log/ops-runbook/sudo.log \
   --logrotate-path /etc/logrotate.d/ops-runbook
 ```
 
-Use `--force-policy` to replace an existing policy file with the sample policy.
-Without `--force-policy`, an existing policy file is preserved.
+Use `--force-config` to replace an existing config file with the sample config.
+Without `--force-config`, an existing config file is preserved.
 
-## Policy
+## Config
 
-The default policy format is TOML:
+The default config format is TOML:
 
 ```toml
 version = 1
@@ -136,10 +136,10 @@ sudo /usr/local/sbin/ops-runbook service status cloudflared
 sudo /usr/local/sbin/ops-runbook logs hermes --lines 200 # systemd only
 sudo /usr/local/sbin/ops-runbook notify telegram_myriad --severity critical --message "disk full"
 sudo /usr/local/sbin/ops-runbook notify discord_myriad --title "Hermes" --message "service degraded"
-sudo /usr/local/sbin/ops-runbook policy check
-sudo /usr/local/sbin/ops-runbook policy explain
-sudo /usr/local/sbin/ops-runbook policy explain --policy-path ./policy.toml
-ops-runbook policy template --backend openrc --output ./policy.toml
+sudo /usr/local/sbin/ops-runbook config check
+sudo /usr/local/sbin/ops-runbook config explain
+sudo /usr/local/sbin/ops-runbook config explain --config-path ./config.toml
+ops-runbook config template --backend openrc --output ./config.toml
 sudo /usr/local/sbin/ops-runbook version
 ```
 
@@ -159,33 +159,33 @@ Notification channels are configured under `[channels.<name>]` with
 
 ## Verification
 
-Validate the policy:
+Validate the config:
 
 ```sh
-sudo /usr/local/sbin/ops-runbook policy check
-sudo /usr/local/sbin/ops-runbook policy check --policy-path ./policy.toml
+sudo /usr/local/sbin/ops-runbook config check
+sudo /usr/local/sbin/ops-runbook config check --config-path ./config.toml
 ```
 
-Dump the validated policy and per-caller derived commands:
+Dump the validated config and per-caller derived commands:
 
 ```sh
-sudo /usr/local/sbin/ops-runbook policy explain
-OPS_RUNBOOK_POLICY_PATH=./policy.toml ops-runbook policy explain
+sudo /usr/local/sbin/ops-runbook config explain
+OPS_RUNBOOK_CONFIG_PATH=./config.toml ops-runbook config explain
 ```
 
-The default policy path is `/etc/ops-runbook/policy.toml`. Use
-`--policy-path` with `policy check` or `policy explain`, or set
-`OPS_RUNBOOK_POLICY_PATH`, to inspect another policy file.
+The default config path is `/etc/ops-runbook/config.toml`. Use
+`--config-path` with `config check` or `config explain`, or set
+`OPS_RUNBOOK_CONFIG_PATH`, to inspect another config file.
 
-Generate a policy template with:
+Generate a config template with:
 
 ```sh
-ops-runbook policy template --backend systemd
-ops-runbook policy template --backend openrc --output ./policy.toml
-ops-runbook policy template --backend openrc --output ./policy.toml --force
+ops-runbook config template --backend systemd
+ops-runbook config template --backend openrc --output ./config.toml
+ops-runbook config template --backend openrc --output ./config.toml --force
 ```
 
-`policy template` is an administrator convenience command and is not included in
+`config template` is an administrator convenience command and is not included in
 the generated sudoers rule.
 
 Audit events are written to:

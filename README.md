@@ -9,7 +9,7 @@ This repository is a Cargo workspace for small, focused tools:
 ```text
 crates/
   ops-session/  GitHub App-backed command session runner
-  ops-runbook/  policy-driven restricted executor for homelab operations
+  ops-runbook/  config-driven restricted executor for homelab operations
 ```
 
 Build individual tools with Cargo:
@@ -90,10 +90,10 @@ sudo /usr/local/sbin/ops-runbook service reload cloudflared
 sudo /usr/local/sbin/ops-runbook service status cloudflared
 sudo /usr/local/sbin/ops-runbook logs hermes --lines 200
 sudo /usr/local/sbin/ops-runbook notify telegram_myriad --severity critical --message "disk full"
-sudo /usr/local/sbin/ops-runbook policy check
-sudo /usr/local/sbin/ops-runbook policy explain
-sudo /usr/local/sbin/ops-runbook policy explain --policy-path ./policy.toml
-ops-runbook policy template --backend openrc --output ./policy.toml
+sudo /usr/local/sbin/ops-runbook config check
+sudo /usr/local/sbin/ops-runbook config explain
+sudo /usr/local/sbin/ops-runbook config explain --config-path ./config.toml
+ops-runbook config template --backend openrc --output ./config.toml
 ```
 
 See [crates/ops-runbook/README.md](crates/ops-runbook/README.md).

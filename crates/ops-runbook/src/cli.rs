@@ -6,7 +6,7 @@ use clap::{Args, Parser, Subcommand};
 
 use crate::audit;
 use crate::bootstrap::{self, BootstrapArgs};
-use crate::config::{configured_policy_path, Backend, Config};
+use crate::config::{configured_config_path, Backend, Config};
 use crate::error::{Error, Result};
 use crate::notification::{self, Notification, Severity};
 use crate::policy::{is_allowed, validate_target, Action};
@@ -18,7 +18,7 @@ const DEFAULT_LOG_LINES: u32 = 200;
 #[derive(Debug, Parser)]
 #[command(name = "ops-runbook")]
 #[command(version = VERSION)]
-#[command(about = "Policy-driven restricted executor for homelab operations")]
+#[command(about = "Config-driven restricted executor for homelab operations")]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -26,7 +26,7 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// Bootstrap local installation, policy, sudoers, logrotate, and group access.
+    /// Bootstrap local installation, config, sudoers, logrotate, and group access.
     Bootstrap(BootstrapArgs),
     /// Manage allowlisted services.
     Service(ServiceCommand),
@@ -34,8 +34,8 @@ enum Command {
     Logs(LogsArgs),
     /// Send an allowlisted notification.
     Notify(NotifyArgs),
-    /// Validate or inspect policy.
-    Policy(PolicyCommand),
+    /// Validate or inspect config.
+    Config(ConfigCommand),
     /// Print the ops-runbook version.
     Version,
 }
@@ -74,7 +74,7 @@ struct LogsArgs {
 
 #[derive(Debug, Args)]
 struct NotifyArgs {
-    /// Notification channel name from policy channels.
+    /// Notification channel name from config channels.
     channel: String,
 
     /// Notification severity.
@@ -91,30 +91,30 @@ struct NotifyArgs {
 }
 
 #[derive(Debug, Args)]
-struct PolicyCommand {
+struct ConfigCommand {
     #[command(subcommand)]
-    command: PolicySubcommand,
+    command: ConfigSubcommand,
 }
 
 #[derive(Debug, Subcommand)]
-enum PolicySubcommand {
-    /// Load and validate the policy file.
-    Check(PolicyArgs),
-    /// Dump the validated policy and derived commands.
-    Explain(PolicyArgs),
-    /// Generate an example policy template.
-    Template(PolicyTemplateArgs),
+enum ConfigSubcommand {
+    /// Load and validate the config file.
+    Check(ConfigArgs),
+    /// Dump the validated config and derived commands.
+    Explain(ConfigArgs),
+    /// Generate an example config template.
+    Template(ConfigTemplateArgs),
 }
 
 #[derive(Debug, Args)]
-struct PolicyArgs {
-    /// Policy file to read.
-    #[arg(long, env = "OPS_RUNBOOK_POLICY_PATH")]
-    policy_path: Option<PathBuf>,
+struct ConfigArgs {
+    /// Config file to read.
+    #[arg(long, env = "OPS_RUNBOOK_CONFIG_PATH")]
+    config_path: Option<PathBuf>,
 }
 
 #[derive(Debug, Args)]
-struct PolicyTemplateArgs {
+struct ConfigTemplateArgs {
     /// Service manager backend for the generated template.
     #[arg(long, value_enum, default_value_t = Backend::Systemd)]
     backend: Backend,
@@ -139,37 +139,37 @@ where
     }
 
     let cli = Cli::parse_from(args);
-    let policy_path = configured_policy_path();
+    let config_path = configured_config_path();
 
     match cli.command {
         Command::Bootstrap(args) => bootstrap::run(args),
         Command::Service(command) => match command.command {
             ServiceSubcommand::Start(args) => {
-                execute(Action::ServiceStart, &args.service, None, &policy_path)
+                execute(Action::ServiceStart, &args.service, None, &config_path)
             }
             ServiceSubcommand::Stop(args) => {
-                execute(Action::ServiceStop, &args.service, None, &policy_path)
+                execute(Action::ServiceStop, &args.service, None, &config_path)
             }
             ServiceSubcommand::Restart(args) => {
-                execute(Action::ServiceRestart, &args.service, None, &policy_path)
+                execute(Action::ServiceRestart, &args.service, None, &config_path)
             }
             ServiceSubcommand::Reload(args) => {
-                execute(Action::ServiceReload, &args.service, None, &policy_path)
+                execute(Action::ServiceReload, &args.service, None, &config_path)
             }
             ServiceSubcommand::Status(args) => {
-                execute(Action::ServiceStatus, &args.service, None, &policy_path)
+                execute(Action::ServiceStatus, &args.service, None, &config_path)
             }
         },
-        Command::Logs(args) => execute(Action::Logs, &args.service, Some(args.lines), &policy_path),
-        Command::Notify(args) => notify(args, &policy_path),
-        Command::Policy(command) => match command.command {
-            PolicySubcommand::Check(args) => {
-                check_policy(args.policy_path.as_deref().unwrap_or(&policy_path))
+        Command::Logs(args) => execute(Action::Logs, &args.service, Some(args.lines), &config_path),
+        Command::Notify(args) => notify(args, &config_path),
+        Command::Config(command) => match command.command {
+            ConfigSubcommand::Check(args) => {
+                check_config(args.config_path.as_deref().unwrap_or(&config_path))
             }
-            PolicySubcommand::Explain(args) => {
-                explain_policy(args.policy_path.as_deref().unwrap_or(&policy_path))
+            ConfigSubcommand::Explain(args) => {
+                explain_config(args.config_path.as_deref().unwrap_or(&config_path))
             }
-            PolicySubcommand::Template(args) => template_policy(args),
+            ConfigSubcommand::Template(args) => template_config(args),
         },
         Command::Version => {
             println!("ops-runbook {VERSION}");
@@ -178,8 +178,8 @@ where
     }
 }
 
-fn load_valid_config(policy_path: &Path) -> Result<Config> {
-    let config = Config::load(policy_path)?;
+fn load_valid_config(config_path: &Path) -> Result<Config> {
+    let config = Config::load(config_path)?;
     config.validate()?;
     Ok(config)
 }
@@ -196,25 +196,25 @@ fn caller_from_sudo() -> Result<String> {
     Ok(caller)
 }
 
-fn check_policy(policy_path: &Path) -> Result<i32> {
-    let config = load_valid_config(policy_path)?;
+fn check_config(config_path: &Path) -> Result<i32> {
+    let config = load_valid_config(config_path)?;
     let mut callers = config
         .callers
         .keys()
         .map(String::as_str)
         .collect::<Vec<_>>();
     callers.sort();
-    println!("policy OK: {}", policy_path.display());
+    println!("config OK: {}", config_path.display());
     println!("callers: {}", callers.join(", "));
     Ok(0)
 }
 
-fn explain_policy(policy_path: &Path) -> Result<i32> {
-    let config = load_valid_config(policy_path)?;
+fn explain_config(config_path: &Path) -> Result<i32> {
+    let config = load_valid_config(config_path)?;
     let mut callers = config.callers.iter().collect::<Vec<_>>();
     callers.sort_by_key(|(caller, _)| *caller);
 
-    println!("policy: {}", policy_path.display());
+    println!("config: {}", config_path.display());
     println!("version: {}", config.version);
     println!("backend: {}", config.backend());
     println!("max_log_lines: {}", config.max_log_lines());
@@ -260,15 +260,15 @@ fn format_string_list(items: &[String]) -> String {
     format!("[{}]", quoted.join(", "))
 }
 
-fn template_policy(args: PolicyTemplateArgs) -> Result<i32> {
-    let template = bootstrap::sample_policy(args.backend);
+fn template_config(args: ConfigTemplateArgs) -> Result<i32> {
+    let template = bootstrap::sample_config(args.backend);
     let Some(output) = args.output else {
         print!("{template}");
         return Ok(0);
     };
 
     if output.exists() && !args.force {
-        return Err(Error::InvalidPolicyOption(format!(
+        return Err(Error::InvalidConfigOption(format!(
             "output already exists: {}",
             output.display()
         )));
@@ -281,12 +281,12 @@ fn template_policy(args: PolicyTemplateArgs) -> Result<i32> {
     Ok(0)
 }
 
-fn notify(args: NotifyArgs, policy_path: &Path) -> Result<i32> {
+fn notify(args: NotifyArgs, config_path: &Path) -> Result<i32> {
     validate_target(&args.channel)?;
     notification::validate_message_text(args.title.as_deref(), &args.message)?;
 
     let caller = caller_from_sudo()?;
-    let config = load_valid_config(policy_path)?;
+    let config = load_valid_config(config_path)?;
     let audit_path = audit::configured_audit_log_path();
     let Some(caller_policy) = config.callers.get(&caller) else {
         audit::write(
@@ -356,11 +356,11 @@ fn execute(
     action: Action,
     target: &str,
     requested_lines: Option<u32>,
-    policy_path: &Path,
+    config_path: &Path,
 ) -> Result<i32> {
     validate_target(target)?;
     let caller = caller_from_sudo()?;
-    let config = load_valid_config(policy_path)?;
+    let config = load_valid_config(config_path)?;
 
     let audit_path = audit::configured_audit_log_path();
     let Some(caller_policy) = config.callers.get(&caller) else {
@@ -425,7 +425,7 @@ fn execute(
         Action::ServiceStatus => runner::service(config.backend(), "status", target),
         Action::Logs => runner::logs(config.backend(), target, lines),
         Action::Notify => {
-            return Err(Error::InvalidPolicyOption(
+            return Err(Error::InvalidConfigOption(
                 "notify must use notify command".to_owned(),
             ))
         }

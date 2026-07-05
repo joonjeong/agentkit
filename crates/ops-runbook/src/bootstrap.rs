@@ -6,7 +6,7 @@ use std::process::Command;
 use clap::Args;
 
 use crate::audit;
-use crate::config::{Backend, DEFAULT_POLICY_PATH};
+use crate::config::{Backend, DEFAULT_CONFIG_PATH};
 use crate::error::{Error, Result};
 use crate::policy::validate_caller;
 
@@ -27,7 +27,7 @@ pub struct BootstrapArgs {
     #[arg(long = "user")]
     users: Vec<String>,
 
-    /// Service manager backend written to the default policy.
+    /// Service manager backend written to the default config.
     #[arg(long, value_enum, default_value_t = Backend::Systemd)]
     backend: Backend,
 
@@ -43,9 +43,9 @@ pub struct BootstrapArgs {
     #[arg(long, default_value = DEFAULT_SUDOERS_PATH)]
     sudoers_path: PathBuf,
 
-    /// Policy file to create when missing.
-    #[arg(long, default_value = DEFAULT_POLICY_PATH)]
-    policy_path: PathBuf,
+    /// Config file to create when missing.
+    #[arg(long, default_value = DEFAULT_CONFIG_PATH)]
+    config_path: PathBuf,
 
     /// Audit log path used by ops-runbook.
     #[arg(long, default_value = audit::DEFAULT_AUDIT_LOG_PATH)]
@@ -59,9 +59,9 @@ pub struct BootstrapArgs {
     #[arg(long, default_value = DEFAULT_LOGROTATE_PATH)]
     logrotate_path: PathBuf,
 
-    /// Replace an existing policy file with the sample policy.
+    /// Replace an existing config file with the sample config.
     #[arg(long)]
-    force_policy: bool,
+    force_config: bool,
 
     /// Do not install or replace the binary.
     #[arg(long)]
@@ -98,19 +98,19 @@ pub fn run(args: BootstrapArgs) -> Result<i32> {
         }
     }
 
-    ensure_parent_dir(&args.policy_path, 0o755)?;
+    ensure_parent_dir(&args.config_path, 0o755)?;
     ensure_parent_dir(&args.audit_log_path, 0o755)?;
     ensure_parent_dir(&args.sudo_log_path, 0o755)?;
     ensure_parent_dir(&args.sudoers_path, 0o755)?;
     ensure_parent_dir(&args.logrotate_path, 0o755)?;
 
     write_if_missing_or_forced(
-        &args.policy_path,
-        sample_policy(args.backend).as_bytes(),
+        &args.config_path,
+        sample_config(args.backend).as_bytes(),
         0o644,
-        args.force_policy,
+        args.force_config,
     )?;
-    println!("policy ready: {}", args.policy_path.display());
+    println!("config ready: {}", args.config_path.display());
 
     let sudoers = sudoers_contents(&args);
     write_sudoers(&args.sudoers_path, sudoers.as_bytes(), args.skip_visudo)?;
@@ -147,7 +147,7 @@ fn validate_args(args: &BootstrapArgs) -> Result<()> {
     }
     validate_path_option("binary-path", &args.binary_path, PathKind::Command)?;
     validate_path_option("sudoers-path", &args.sudoers_path, PathKind::Config)?;
-    validate_path_option("policy-path", &args.policy_path, PathKind::Config)?;
+    validate_path_option("config-path", &args.config_path, PathKind::Config)?;
     validate_path_option("audit-log-path", &args.audit_log_path, PathKind::Config)?;
     validate_path_option("sudo-log-path", &args.sudo_log_path, PathKind::Config)?;
     validate_path_option("logrotate-path", &args.logrotate_path, PathKind::Config)?;
@@ -378,10 +378,10 @@ fn logrotate_contents(audit_log_path: &Path, sudo_log_path: &Path) -> String {
     )
 }
 
-pub(crate) fn sample_policy(backend: Backend) -> String {
+pub(crate) fn sample_config(backend: Backend) -> String {
     match backend {
-        Backend::Systemd => include_str!("../resources/examples/policy/systemd.example.toml"),
-        Backend::Openrc => include_str!("../resources/examples/policy/openrc.example.toml"),
+        Backend::Systemd => include_str!("../resources/examples/config/systemd.example.toml"),
+        Backend::Openrc => include_str!("../resources/examples/config/openrc.example.toml"),
     }
     .to_owned()
 }

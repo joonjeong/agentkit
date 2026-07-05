@@ -1,14 +1,13 @@
-# Example ops-runbook policy for OpenRC hosts.
+# Example ops-runbook config for systemd hosts.
 #
-# Runtime policy is installed to /etc/ops-runbook/policy.toml. Edit that file
+# Runtime config is installed to /etc/ops-runbook/config.toml. Edit that file
 # on each host after bootstrap. This example keeps one caller and a small
-# service allowlist. The OpenRC backend supports service control and status;
-# logs return an explicit unsupported-backend error.
+# service allowlist.
 
 version = 1
 
 [defaults]
-backend = "openrc"
+backend = "systemd"
 max_log_lines = 1000
 
 [channels.telegram_myriad]
@@ -24,7 +23,7 @@ webhook_url_file = "/etc/ops-runbook/secrets/discord-webhook-url"
 # Allows service start, stop, restart, and reload.
 service_control = ["hermes", "cloudflared", "tailscale"]
 
-# Allows service status and logs. Logs are currently unsupported on OpenRC.
+# Allows service status and logs.
 service_read = ["hermes", "cloudflared", "tailscale"]
 
 # Allows sending notifications without exposing provider credentials to the caller.

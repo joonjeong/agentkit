@@ -1,6 +1,6 @@
 # ops-runbook 설치 및 사용법
 
-`ops-runbook`은 홈랩 운영 작업을 위한 policy 기반 제한 실행기입니다.
+`ops-runbook`은 홈랩 운영 작업을 위한 config 기반 제한 실행기입니다.
 자동화 에이전트가 sudo를 통해 제한된 root 작업만 실행하게 하며, raw shell,
 `systemctl`, `apt`, Docker socket, Ansible 접근 권한은 주지 않습니다.
 
@@ -22,7 +22,7 @@ sudo ./ops-runbook bootstrap --user hermes
 - 현재 바이너리를 `/usr/local/sbin/ops-runbook`에 설치
 - `ops-agent` 시스템 그룹이 없으면 생성
 - `--user`로 지정한 기존 계정을 `ops-agent` 그룹에 추가
-- `/etc/ops-runbook/policy.toml`이 없으면 기본 policy 생성
+- `/etc/ops-runbook/config.toml`이 없으면 기본 config 생성
 - `/etc/sudoers.d/ops-agent` 생성
 - `/var/log/ops-runbook` 아래 로그 경로 생성
 - `/etc/logrotate.d/ops-runbook` 생성
@@ -62,18 +62,18 @@ sudo ./ops-runbook bootstrap \
   --backend systemd \
   --group ops-agent \
   --sudoers-path /etc/sudoers.d/ops-agent \
-  --policy-path /etc/ops-runbook/policy.toml \
+  --config-path /etc/ops-runbook/config.toml \
   --audit-log-path /var/log/ops-runbook/audit.log \
   --sudo-log-path /var/log/ops-runbook/sudo.log \
   --logrotate-path /etc/logrotate.d/ops-runbook
 ```
 
-기존 policy 파일을 샘플 policy로 교체하려면 `--force-policy`를 사용합니다.
-`--force-policy`가 없으면 기존 policy 파일은 보존됩니다.
+기존 config 파일을 샘플 config로 교체하려면 `--force-config`를 사용합니다.
+`--force-config`가 없으면 기존 config 파일은 보존됩니다.
 
-## Policy
+## Config
 
-기본 policy 형식은 TOML입니다.
+기본 config 형식은 TOML입니다.
 
 ```toml
 version = 1
@@ -136,10 +136,10 @@ sudo /usr/local/sbin/ops-runbook service status cloudflared
 sudo /usr/local/sbin/ops-runbook logs hermes --lines 200 # systemd only
 sudo /usr/local/sbin/ops-runbook notify telegram_myriad --severity critical --message "disk full"
 sudo /usr/local/sbin/ops-runbook notify discord_myriad --title "Hermes" --message "service degraded"
-sudo /usr/local/sbin/ops-runbook policy check
-sudo /usr/local/sbin/ops-runbook policy explain
-sudo /usr/local/sbin/ops-runbook policy explain --policy-path ./policy.toml
-ops-runbook policy template --backend openrc --output ./policy.toml
+sudo /usr/local/sbin/ops-runbook config check
+sudo /usr/local/sbin/ops-runbook config explain
+sudo /usr/local/sbin/ops-runbook config explain --config-path ./config.toml
+ops-runbook config template --backend openrc --output ./config.toml
 sudo /usr/local/sbin/ops-runbook version
 ```
 
@@ -158,33 +158,33 @@ Discord 채널은 `webhook_url_file` 또는 `webhook_url_env`가 필요합니다
 
 ## 확인
 
-policy를 검증합니다.
+config를 검증합니다.
 
 ```sh
-sudo /usr/local/sbin/ops-runbook policy check
-sudo /usr/local/sbin/ops-runbook policy check --policy-path ./policy.toml
+sudo /usr/local/sbin/ops-runbook config check
+sudo /usr/local/sbin/ops-runbook config check --config-path ./config.toml
 ```
 
-검증된 policy와 caller별 파생 명령을 출력합니다.
+검증된 config와 caller별 파생 명령을 출력합니다.
 
 ```sh
-sudo /usr/local/sbin/ops-runbook policy explain
-OPS_RUNBOOK_POLICY_PATH=./policy.toml ops-runbook policy explain
+sudo /usr/local/sbin/ops-runbook config explain
+OPS_RUNBOOK_CONFIG_PATH=./config.toml ops-runbook config explain
 ```
 
-기본 policy 경로는 `/etc/ops-runbook/policy.toml`입니다. 다른 파일을
-확인하려면 `policy check`와 `policy explain`에서 `--policy-path`를
-지정하거나 `OPS_RUNBOOK_POLICY_PATH` 환경변수를 사용할 수 있습니다.
+기본 config 경로는 `/etc/ops-runbook/config.toml`입니다. 다른 파일을
+확인하려면 `config check`와 `config explain`에서 `--config-path`를
+지정하거나 `OPS_RUNBOOK_CONFIG_PATH` 환경변수를 사용할 수 있습니다.
 
 설정 파일 템플릿은 다음처럼 생성합니다.
 
 ```sh
-ops-runbook policy template --backend systemd
-ops-runbook policy template --backend openrc --output ./policy.toml
-ops-runbook policy template --backend openrc --output ./policy.toml --force
+ops-runbook config template --backend systemd
+ops-runbook config template --backend openrc --output ./config.toml
+ops-runbook config template --backend openrc --output ./config.toml --force
 ```
 
-`policy template`은 관리자 편의 명령이며, 생성되는 sudoers 규칙에는
+`config template`은 관리자 편의 명령이며, 생성되는 sudoers 규칙에는
 포함되지 않습니다.
 
 감사 로그는 다음 파일에 기록됩니다.

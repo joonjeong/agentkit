@@ -9,7 +9,7 @@ use serde::Deserialize;
 use crate::error::{Error, Result};
 use crate::policy::{validate_caller, validate_target, Action};
 
-pub const DEFAULT_POLICY_PATH: &str = "/etc/ops-runbook/policy.toml";
+pub const DEFAULT_CONFIG_PATH: &str = "/etc/ops-runbook/config.toml";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -100,7 +100,7 @@ impl Config {
 
     pub fn validate(&self) -> Result<()> {
         if self.version != 1 {
-            return Err(Error::UnsupportedPolicyVersion(self.version));
+            return Err(Error::UnsupportedConfigVersion(self.version));
         }
 
         for (caller, policy) in &self.callers {
@@ -193,10 +193,10 @@ fn validate_secret_ref(name: &str, env: Option<&str>, file: Option<&Path>) -> Re
     }
 }
 
-pub fn configured_policy_path() -> PathBuf {
-    if let Some(path) = std::env::var_os("OPS_RUNBOOK_POLICY_PATH") {
+pub fn configured_config_path() -> PathBuf {
+    if let Some(path) = std::env::var_os("OPS_RUNBOOK_CONFIG_PATH") {
         return PathBuf::from(path);
     }
 
-    PathBuf::from(DEFAULT_POLICY_PATH)
+    PathBuf::from(DEFAULT_CONFIG_PATH)
 }

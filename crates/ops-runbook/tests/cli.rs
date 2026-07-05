@@ -8,59 +8,59 @@ use std::time::{SystemTime, UNIX_EPOCH};
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[test]
-fn policy_check_accepts_sample_policy() {
-    let temp = temp_dir("ops-runbook-policy-check");
-    let policy = write_policy(&temp, SAMPLE_POLICY);
+fn config_check_accepts_sample_config() {
+    let temp = temp_dir("ops-runbook-config-check");
+    let config = write_config(&temp, SAMPLE_CONFIG);
 
     Command::cargo_bin("ops-runbook")
         .expect("binary exists")
-        .args(["policy", "check"])
+        .args(["config", "check"])
         .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
-        .env("OPS_RUNBOOK_POLICY_PATH", &policy)
+        .env("OPS_RUNBOOK_CONFIG_PATH", &config)
         .assert()
         .success()
         .stdout(
-            predicate::str::contains("policy OK:").and(predicate::str::contains("callers: hermes")),
+            predicate::str::contains("config OK:").and(predicate::str::contains("callers: hermes")),
         );
 
     fs::remove_dir_all(temp).expect("temporary directory removed");
 }
 
 #[test]
-fn policy_check_accepts_explicit_policy_path() {
-    let temp = temp_dir("ops-runbook-policy-check-path");
-    let policy = write_policy(&temp, SAMPLE_POLICY);
-    let invalid_policy = temp.join("invalid-policy.toml");
-    fs::write(&invalid_policy, "not toml").expect("invalid policy written");
+fn config_check_accepts_explicit_config_path() {
+    let temp = temp_dir("ops-runbook-config-check-path");
+    let config = write_config(&temp, SAMPLE_CONFIG);
+    let invalid_config = temp.join("invalid-config.toml");
+    fs::write(&invalid_config, "not toml").expect("invalid config written");
 
     Command::cargo_bin("ops-runbook")
         .expect("binary exists")
         .args([
-            "policy",
+            "config",
             "check",
-            "--policy-path",
-            policy.to_str().expect("utf-8 path"),
+            "--config-path",
+            config.to_str().expect("utf-8 path"),
         ])
-        .env("OPS_RUNBOOK_POLICY_PATH", &invalid_policy)
+        .env("OPS_RUNBOOK_CONFIG_PATH", &invalid_config)
         .assert()
         .success()
         .stdout(
-            predicate::str::contains("policy OK:").and(predicate::str::contains("callers: hermes")),
+            predicate::str::contains("config OK:").and(predicate::str::contains("callers: hermes")),
         );
 
     fs::remove_dir_all(temp).expect("temporary directory removed");
 }
 
 #[test]
-fn policy_explain_dumps_validated_policy() {
+fn config_explain_dumps_validated_config() {
     let temp = temp_dir("ops-runbook-explain");
-    let policy = write_policy(&temp, SAMPLE_POLICY);
+    let config = write_config(&temp, SAMPLE_CONFIG);
 
     Command::cargo_bin("ops-runbook")
         .expect("binary exists")
-        .args(["policy", "explain"])
+        .args(["config", "explain"])
         .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
-        .env("OPS_RUNBOOK_POLICY_PATH", &policy)
+        .env("OPS_RUNBOOK_CONFIG_PATH", &config)
         .assert()
         .success()
         .stdout(
@@ -86,10 +86,10 @@ fn policy_explain_dumps_validated_policy() {
 }
 
 #[test]
-fn policy_template_prints_backend_template() {
+fn config_template_prints_backend_template() {
     Command::cargo_bin("ops-runbook")
         .expect("binary exists")
-        .args(["policy", "template", "--backend", "openrc"])
+        .args(["config", "template", "--backend", "openrc"])
         .assert()
         .success()
         .stdout(
@@ -100,14 +100,14 @@ fn policy_template_prints_backend_template() {
 }
 
 #[test]
-fn policy_template_writes_output_without_overwriting_by_default() {
-    let temp = temp_dir("ops-runbook-policy-template");
-    let output = temp.join("policy.toml");
+fn config_template_writes_output_without_overwriting_by_default() {
+    let temp = temp_dir("ops-runbook-config-template");
+    let output = temp.join("config.toml");
 
     Command::cargo_bin("ops-runbook")
         .expect("binary exists")
         .args([
-            "policy",
+            "config",
             "template",
             "--output",
             output.to_str().expect("utf-8 path"),
@@ -121,7 +121,7 @@ fn policy_template_writes_output_without_overwriting_by_default() {
     Command::cargo_bin("ops-runbook")
         .expect("binary exists")
         .args([
-            "policy",
+            "config",
             "template",
             "--backend",
             "openrc",
@@ -135,7 +135,7 @@ fn policy_template_writes_output_without_overwriting_by_default() {
     Command::cargo_bin("ops-runbook")
         .expect("binary exists")
         .args([
-            "policy",
+            "config",
             "template",
             "--backend",
             "openrc",
@@ -155,7 +155,7 @@ fn policy_template_writes_output_without_overwriting_by_default() {
 #[test]
 fn service_status_runs_fixed_systemctl_without_shell() {
     let temp = temp_dir("ops-runbook-status");
-    let policy = write_policy(&temp, SAMPLE_POLICY);
+    let config = write_config(&temp, SAMPLE_CONFIG);
     let audit = temp.join("audit.log");
     let recorder = write_recorder(&temp, "systemctl-recorder");
     let record = temp.join("systemctl.args");
@@ -164,7 +164,7 @@ fn service_status_runs_fixed_systemctl_without_shell() {
         .expect("binary exists")
         .args(["service", "status", "hermes"])
         .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
-        .env("OPS_RUNBOOK_POLICY_PATH", &policy)
+        .env("OPS_RUNBOOK_CONFIG_PATH", &config)
         .env("OPS_RUNBOOK_AUDIT_LOG", &audit)
         .env("OPS_RUNBOOK_SYSTEMCTL_PATH", &recorder)
         .env("OPS_RUNBOOK_RECORD_PATH", &record)
@@ -188,7 +188,7 @@ fn service_status_runs_fixed_systemctl_without_shell() {
 #[test]
 fn service_start_runs_fixed_systemctl_without_shell() {
     let temp = temp_dir("ops-runbook-start");
-    let policy = write_policy(&temp, SAMPLE_POLICY);
+    let config = write_config(&temp, SAMPLE_CONFIG);
     let audit = temp.join("audit.log");
     let recorder = write_recorder(&temp, "systemctl-recorder");
     let record = temp.join("systemctl.args");
@@ -197,7 +197,7 @@ fn service_start_runs_fixed_systemctl_without_shell() {
         .expect("binary exists")
         .args(["service", "start", "hermes"])
         .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
-        .env("OPS_RUNBOOK_POLICY_PATH", &policy)
+        .env("OPS_RUNBOOK_CONFIG_PATH", &config)
         .env("OPS_RUNBOOK_AUDIT_LOG", &audit)
         .env("OPS_RUNBOOK_SYSTEMCTL_PATH", &recorder)
         .env("OPS_RUNBOOK_RECORD_PATH", &record)
@@ -216,7 +216,7 @@ fn service_start_runs_fixed_systemctl_without_shell() {
 #[test]
 fn service_stop_runs_fixed_systemctl_without_shell() {
     let temp = temp_dir("ops-runbook-stop");
-    let policy = write_policy(&temp, SAMPLE_POLICY);
+    let config = write_config(&temp, SAMPLE_CONFIG);
     let audit = temp.join("audit.log");
     let recorder = write_recorder(&temp, "systemctl-recorder");
     let record = temp.join("systemctl.args");
@@ -225,7 +225,7 @@ fn service_stop_runs_fixed_systemctl_without_shell() {
         .expect("binary exists")
         .args(["service", "stop", "hermes"])
         .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
-        .env("OPS_RUNBOOK_POLICY_PATH", &policy)
+        .env("OPS_RUNBOOK_CONFIG_PATH", &config)
         .env("OPS_RUNBOOK_AUDIT_LOG", &audit)
         .env("OPS_RUNBOOK_SYSTEMCTL_PATH", &recorder)
         .env("OPS_RUNBOOK_RECORD_PATH", &record)
@@ -244,7 +244,7 @@ fn service_stop_runs_fixed_systemctl_without_shell() {
 #[test]
 fn notify_posts_to_allowlisted_telegram_channel() {
     let temp = temp_dir("ops-runbook-notify-telegram");
-    let policy = write_policy(&temp, TELEGRAM_NOTIFY_POLICY);
+    let config = write_config(&temp, TELEGRAM_NOTIFY_CONFIG);
     let audit = temp.join("audit.log");
     let record = temp.join("notification.record");
 
@@ -261,7 +261,7 @@ fn notify_posts_to_allowlisted_telegram_channel() {
             "/var is 95%",
         ])
         .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
-        .env("OPS_RUNBOOK_POLICY_PATH", &policy)
+        .env("OPS_RUNBOOK_CONFIG_PATH", &config)
         .env("OPS_RUNBOOK_AUDIT_LOG", &audit)
         .env("OPS_RUNBOOK_TELEGRAM_API_BASE", "https://telegram.test")
         .env("OPS_RUNBOOK_NOTIFICATION_RECORD_PATH", &record)
@@ -288,7 +288,7 @@ fn notify_posts_to_allowlisted_telegram_channel() {
 #[test]
 fn notify_posts_to_allowlisted_discord_channel() {
     let temp = temp_dir("ops-runbook-notify-discord");
-    let policy = write_policy(
+    let config = write_config(
         &temp,
         r#"
 version = 1
@@ -319,7 +319,7 @@ notify = ["discord_myriad"]
             "service degraded",
         ])
         .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
-        .env("OPS_RUNBOOK_POLICY_PATH", &policy)
+        .env("OPS_RUNBOOK_CONFIG_PATH", &config)
         .env("OPS_RUNBOOK_AUDIT_LOG", &audit)
         .env("OPS_RUNBOOK_NOTIFICATION_RECORD_PATH", &record)
         .env(
@@ -342,14 +342,14 @@ notify = ["discord_myriad"]
 #[test]
 fn notify_rejects_unallowlisted_channel_without_posting() {
     let temp = temp_dir("ops-runbook-notify-denied");
-    let policy = write_policy(&temp, TELEGRAM_NOTIFY_POLICY);
+    let config = write_config(&temp, TELEGRAM_NOTIFY_CONFIG);
     let audit = temp.join("audit.log");
 
     Command::cargo_bin("ops-runbook")
         .expect("binary exists")
         .args(["notify", "telegram_other", "--message", "should not send"])
         .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
-        .env("OPS_RUNBOOK_POLICY_PATH", &policy)
+        .env("OPS_RUNBOOK_CONFIG_PATH", &config)
         .env("OPS_RUNBOOK_AUDIT_LOG", &audit)
         .env("SUDO_USER", "hermes")
         .assert()
@@ -369,7 +369,7 @@ fn notify_rejects_unallowlisted_channel_without_posting() {
 #[test]
 fn openrc_service_status_runs_rc_service_without_shell() {
     let temp = temp_dir("ops-runbook-openrc-status");
-    let policy = write_policy(&temp, OPENRC_POLICY);
+    let config = write_config(&temp, OPENRC_CONFIG);
     let audit = temp.join("audit.log");
     let recorder = write_recorder(&temp, "rc-service-recorder");
     let record = temp.join("rc-service.args");
@@ -378,7 +378,7 @@ fn openrc_service_status_runs_rc_service_without_shell() {
         .expect("binary exists")
         .args(["service", "status", "hermes"])
         .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
-        .env("OPS_RUNBOOK_POLICY_PATH", &policy)
+        .env("OPS_RUNBOOK_CONFIG_PATH", &config)
         .env("OPS_RUNBOOK_AUDIT_LOG", &audit)
         .env("OPS_RUNBOOK_RC_SERVICE_PATH", &recorder)
         .env("OPS_RUNBOOK_RECORD_PATH", &record)
@@ -399,7 +399,7 @@ fn openrc_service_status_runs_rc_service_without_shell() {
 #[test]
 fn openrc_service_start_runs_rc_service_without_shell() {
     let temp = temp_dir("ops-runbook-openrc-start");
-    let policy = write_policy(&temp, OPENRC_POLICY);
+    let config = write_config(&temp, OPENRC_CONFIG);
     let audit = temp.join("audit.log");
     let recorder = write_recorder(&temp, "rc-service-recorder");
     let record = temp.join("rc-service.args");
@@ -408,7 +408,7 @@ fn openrc_service_start_runs_rc_service_without_shell() {
         .expect("binary exists")
         .args(["service", "start", "hermes"])
         .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
-        .env("OPS_RUNBOOK_POLICY_PATH", &policy)
+        .env("OPS_RUNBOOK_CONFIG_PATH", &config)
         .env("OPS_RUNBOOK_AUDIT_LOG", &audit)
         .env("OPS_RUNBOOK_RC_SERVICE_PATH", &recorder)
         .env("OPS_RUNBOOK_RECORD_PATH", &record)
@@ -427,14 +427,14 @@ fn openrc_service_start_runs_rc_service_without_shell() {
 #[test]
 fn openrc_logs_are_explicitly_unsupported() {
     let temp = temp_dir("ops-runbook-openrc-logs");
-    let policy = write_policy(&temp, OPENRC_POLICY);
+    let config = write_config(&temp, OPENRC_CONFIG);
     let audit = temp.join("audit.log");
 
     Command::cargo_bin("ops-runbook")
         .expect("binary exists")
         .args(["logs", "hermes", "--lines", "200"])
         .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
-        .env("OPS_RUNBOOK_POLICY_PATH", &policy)
+        .env("OPS_RUNBOOK_CONFIG_PATH", &config)
         .env("OPS_RUNBOOK_AUDIT_LOG", &audit)
         .env("SUDO_USER", "hermes")
         .assert()
@@ -450,9 +450,9 @@ fn openrc_logs_are_explicitly_unsupported() {
 }
 
 #[test]
-fn policy_check_rejects_unknown_policy_fields() {
-    let temp = temp_dir("ops-runbook-unknown-policy-field");
-    let policy = write_policy(
+fn config_check_rejects_unknown_config_fields() {
+    let temp = temp_dir("ops-runbook-unknown-config-field");
+    let config = write_config(
         &temp,
         r#"
 version = 1
@@ -467,9 +467,9 @@ service_restarts = ["nginx"]
 
     Command::cargo_bin("ops-runbook")
         .expect("binary exists")
-        .args(["policy", "check"])
+        .args(["config", "check"])
         .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
-        .env("OPS_RUNBOOK_POLICY_PATH", &policy)
+        .env("OPS_RUNBOOK_CONFIG_PATH", &config)
         .assert()
         .failure()
         .stderr(predicate::str::contains("unknown field"));
@@ -480,7 +480,7 @@ service_restarts = ["nginx"]
 #[test]
 fn denied_target_is_audited_and_not_executed() {
     let temp = temp_dir("ops-runbook-denied");
-    let policy = write_policy(&temp, SAMPLE_POLICY);
+    let config = write_config(&temp, SAMPLE_CONFIG);
     let audit = temp.join("audit.log");
     let recorder = write_recorder(&temp, "systemctl-recorder");
     let record = temp.join("systemctl.args");
@@ -489,7 +489,7 @@ fn denied_target_is_audited_and_not_executed() {
         .expect("binary exists")
         .args(["service", "restart", "nginx"])
         .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
-        .env("OPS_RUNBOOK_POLICY_PATH", &policy)
+        .env("OPS_RUNBOOK_CONFIG_PATH", &config)
         .env("OPS_RUNBOOK_AUDIT_LOG", &audit)
         .env("OPS_RUNBOOK_SYSTEMCTL_PATH", &recorder)
         .env("OPS_RUNBOOK_RECORD_PATH", &record)
@@ -508,16 +508,16 @@ fn denied_target_is_audited_and_not_executed() {
 }
 
 #[test]
-fn logs_rejects_line_count_above_policy_maximum() {
+fn logs_rejects_line_count_above_config_maximum() {
     let temp = temp_dir("ops-runbook-lines");
-    let policy = write_policy(&temp, SAMPLE_POLICY);
+    let config = write_config(&temp, SAMPLE_CONFIG);
     let audit = temp.join("audit.log");
 
     Command::cargo_bin("ops-runbook")
         .expect("binary exists")
         .args(["logs", "hermes", "--lines", "999999"])
         .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
-        .env("OPS_RUNBOOK_POLICY_PATH", &policy)
+        .env("OPS_RUNBOOK_CONFIG_PATH", &config)
         .env("OPS_RUNBOOK_AUDIT_LOG", &audit)
         .env("SUDO_USER", "hermes")
         .assert()
@@ -533,13 +533,13 @@ fn logs_rejects_line_count_above_policy_maximum() {
 #[test]
 fn direct_root_execution_is_rejected() {
     let temp = temp_dir("ops-runbook-root");
-    let policy = write_policy(&temp, SAMPLE_POLICY);
+    let config = write_config(&temp, SAMPLE_CONFIG);
 
     Command::cargo_bin("ops-runbook")
         .expect("binary exists")
         .args(["service", "status", "hermes"])
         .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
-        .env("OPS_RUNBOOK_POLICY_PATH", &policy)
+        .env("OPS_RUNBOOK_CONFIG_PATH", &config)
         .env("SUDO_USER", "root")
         .assert()
         .failure()
@@ -556,7 +556,7 @@ fn bootstrap_installs_binary_and_writes_configurable_files() {
     let source_binary = temp.join("source/ops-runbook");
     let binary = temp.join("bin/ops-runbook");
     let sudoers = temp.join("sudoers/custom-ops-agent");
-    let policy = temp.join("etc/policy.toml");
+    let config = temp.join("etc/config.toml");
     let audit_log = temp.join("logs/audit.log");
     let sudo_log = temp.join("logs/sudo.log");
     let logrotate = temp.join("logrotate/ops-runbook");
@@ -577,8 +577,8 @@ fn bootstrap_installs_binary_and_writes_configurable_files() {
             binary.to_str().expect("utf-8 path"),
             "--sudoers-path",
             sudoers.to_str().expect("utf-8 path"),
-            "--policy-path",
-            policy.to_str().expect("utf-8 path"),
+            "--config-path",
+            config.to_str().expect("utf-8 path"),
             "--audit-log-path",
             audit_log.to_str().expect("utf-8 path"),
             "--sudo-log-path",
@@ -600,14 +600,14 @@ fn bootstrap_installs_binary_and_writes_configurable_files() {
     assert!(sudoers_contents.contains(&format!("logfile=\"{}\"", sudo_log.display())));
     assert!(sudoers_contents.contains(&format!("{} service restart *", binary.display())));
     assert!(sudoers_contents.contains(&format!("{} notify *", binary.display())));
-    assert!(sudoers_contents.contains(&format!("{} policy check *", binary.display())));
-    assert!(sudoers_contents.contains(&format!("{} policy explain", binary.display())));
-    assert!(sudoers_contents.contains(&format!("{} policy explain *", binary.display())));
+    assert!(sudoers_contents.contains(&format!("{} config check *", binary.display())));
+    assert!(sudoers_contents.contains(&format!("{} config explain", binary.display())));
+    assert!(sudoers_contents.contains(&format!("{} config explain *", binary.display())));
     assert!(!sudoers_contents.contains(" bootstrap"));
 
-    let policy_contents = fs::read_to_string(policy).expect("policy written");
-    assert!(policy_contents.contains("backend = \"systemd\""));
-    assert!(policy_contents.contains("[callers.hermes]"));
+    let config_contents = fs::read_to_string(config).expect("config written");
+    assert!(config_contents.contains("backend = \"systemd\""));
+    assert!(config_contents.contains("[callers.hermes]"));
 
     let logrotate_contents = fs::read_to_string(logrotate).expect("logrotate written");
     assert!(logrotate_contents.contains(&audit_log.display().to_string()));
@@ -634,12 +634,12 @@ fn bootstrap_rejects_relative_sudoers_paths() {
 }
 
 #[test]
-fn bootstrap_can_write_openrc_default_policy() {
+fn bootstrap_can_write_openrc_default_config() {
     let temp = temp_dir("ops-runbook-bootstrap-openrc");
     let source_binary = temp.join("source/ops-runbook");
     let binary = temp.join("bin/ops-runbook");
     let sudoers = temp.join("sudoers/ops-agent");
-    let policy = temp.join("etc/policy.toml");
+    let config = temp.join("etc/config.toml");
     let audit_log = temp.join("logs/audit.log");
     let sudo_log = temp.join("logs/sudo.log");
     let logrotate = temp.join("logrotate/ops-runbook");
@@ -660,8 +660,8 @@ fn bootstrap_can_write_openrc_default_policy() {
             binary.to_str().expect("utf-8 path"),
             "--sudoers-path",
             sudoers.to_str().expect("utf-8 path"),
-            "--policy-path",
-            policy.to_str().expect("utf-8 path"),
+            "--config-path",
+            config.to_str().expect("utf-8 path"),
             "--audit-log-path",
             audit_log.to_str().expect("utf-8 path"),
             "--sudo-log-path",
@@ -673,8 +673,8 @@ fn bootstrap_can_write_openrc_default_policy() {
         .assert()
         .success();
 
-    let policy_contents = fs::read_to_string(policy).expect("policy written");
-    assert!(policy_contents.contains("backend = \"openrc\""));
+    let config_contents = fs::read_to_string(config).expect("config written");
+    assert!(config_contents.contains("backend = \"openrc\""));
 
     fs::remove_dir_all(temp).expect("temporary directory removed");
 }
@@ -690,9 +690,9 @@ fn temp_dir(prefix: &str) -> PathBuf {
     path
 }
 
-fn write_policy(dir: &Path, contents: &str) -> PathBuf {
-    let path = dir.join("policy.toml");
-    fs::write(&path, contents).expect("policy written");
+fn write_config(dir: &Path, contents: &str) -> PathBuf {
+    let path = dir.join("config.toml");
+    fs::write(&path, contents).expect("config written");
     path
 }
 
@@ -725,9 +725,9 @@ fn write_recorder(dir: &Path, name: &str) -> PathBuf {
     path
 }
 
-const SAMPLE_POLICY: &str = include_str!("../resources/examples/policy/systemd.example.toml");
-const OPENRC_POLICY: &str = include_str!("../resources/examples/policy/openrc.example.toml");
-const TELEGRAM_NOTIFY_POLICY: &str = r#"
+const SAMPLE_CONFIG: &str = include_str!("../resources/examples/config/systemd.example.toml");
+const OPENRC_CONFIG: &str = include_str!("../resources/examples/config/openrc.example.toml");
+const TELEGRAM_NOTIFY_CONFIG: &str = r#"
 version = 1
 
 [defaults]
