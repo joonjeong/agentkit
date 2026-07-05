@@ -33,10 +33,17 @@ ops-session github-app run \
 ```
 
 GitHub App credential material is read from the user-level config file
-`$XDG_CONFIG_HOME/ops-session/github.toml`, or
-`~/.config/ops-session/github.toml` when `XDG_CONFIG_HOME` is unset. Set
-`private_key_path` there; do not pass private key paths or private key contents
-through CLI arguments or environment variables.
+`$XDG_CONFIG_HOME/ops-session/config.toml`, or
+`~/.config/ops-session/config.toml` when `XDG_CONFIG_HOME` is unset. Set
+`github_app.private_key_path` there; do not pass private key paths or private
+key contents through CLI arguments or environment variables.
+The config file can contain other top-level provider sections; GitHub App
+commands read `[github_app]` and still reject unknown fields inside that section.
+
+When one node hosts multiple agents, define one `[github_app.profiles.<name>]`
+entry per agent and set `OPS_SESSION_GITHUB_PROFILE` in each agent's service
+environment. Profiles isolate repository scope, optional installation IDs, and
+requested token permissions.
 
 The child command receives `GH_TOKEN` and `GITHUB_TOKEN`. GitHub App credential
 environment variables are removed from the child environment. Shell syntax such
@@ -61,9 +68,9 @@ ops-session github-app run \
   -- git ls-remote --heads https://github.com/OWNER/REPO.git
 ```
 
-Validate or create the GitHub App auth config with
+Validate the GitHub App auth config or print an example config with
 `ops-session github-app config check` and
-`ops-session github-app config template`.
+`ops-session github-app config example`.
 
 See [crates/ops-session/README.md](crates/ops-session/README.md).
 
