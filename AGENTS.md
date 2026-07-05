@@ -15,12 +15,11 @@ Each tool should own its command surface directly, like `ops-session` and
 token context:
 
 ```sh
-ops-session github ... -- COMMAND [ARG]...
+ops-session github-app run ... -- COMMAND [ARG]...
 ```
 
-For diagnostics, `ops-session github app-auth` signs a GitHub App JWT and can
-exchange it for an installation token. Prefer `ops-session github ... -- COMMAND`
-for normal agent GitHub work so tokens are injected only into the child process.
+Prefer `ops-session github-app run ... -- COMMAND` for normal agent GitHub work
+so tokens are injected only into the child process.
 GitHub App private key paths are read from the GitHub config file, not from
 arguments or environment variables.
 

@@ -16,8 +16,9 @@ const VERSION: &str = match option_env!("OPS_SESSION_VERSION") {
 #[command(version = VERSION)]
 #[command(about = "Run a command in an authenticated operations session")]
 #[command(after_long_help = "Invocation forms:
-  ops-session github [OPTIONS] -- COMMAND [ARG]...
-  ops-session github app-auth [OPTIONS]
+  ops-session github-app run [OPTIONS] -- COMMAND [ARG]...
+  ops-session github-app config check
+  ops-session github-app config template
   ops-session agent-skill --install-path DIR
 
 For now, GitHub App authentication is the only supported session provider.")]
@@ -28,18 +29,11 @@ struct OpsSessionCli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// Run a command through a GitHub App installation token.
-    Github(github::GithubSessionArgs),
+    /// GitHub App-backed operations session commands.
+    #[command(name = "github-app")]
+    GithubApp(github::GithubAppArgs),
     /// Create the GitHub App agent workflow skill.
     AgentSkill(github::AppAgentWorkflowSkillArgs),
-}
-
-#[derive(Debug, Parser)]
-#[command(name = "ops-session github app-auth")]
-#[command(version = VERSION)]
-struct AppAuthCli {
-    #[command(flatten)]
-    args: github::AppAuthArgs,
 }
 
 pub fn run<I, T>(args: I) -> Result<()>
@@ -62,19 +56,9 @@ where
         args[0] = OsString::from("ops-session");
     }
 
-    match args.get(1).and_then(|arg| arg.to_str()) {
-        Some("github") if args.get(2).and_then(|arg| arg.to_str()) == Some("app-auth") => {
-            args.remove(2);
-            args.remove(1);
-            let cli = AppAuthCli::parse_from(args);
-            github::app_auth(cli.args)
-        }
-        _ => {
-            let cli = OpsSessionCli::parse_from(args);
-            match cli.command {
-                Command::Github(args) => github::github_session(args),
-                Command::AgentSkill(args) => github::create_app_agent_workflow_skill(args),
-            }
-        }
+    let cli = OpsSessionCli::parse_from(args);
+    match cli.command {
+        Command::GithubApp(args) => github::github_app(args),
+        Command::AgentSkill(args) => github::create_app_agent_workflow_skill(args),
     }
 }

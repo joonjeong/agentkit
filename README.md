@@ -26,22 +26,24 @@ token context. For now, GitHub App authentication is the only supported session
 provider.
 
 ```sh
-ops-session github \
+ops-session github-app run \
   --app-id "$GITHUB_APP_ID" \
   --repo OWNER/REPO \
   -- git remote update
 ```
 
-GitHub App credential material is read from `/etc/ops-session/github.toml` by
-default. Set `private_key_path` there; do not pass private key paths or private
-key contents through CLI arguments or environment variables.
+GitHub App credential material is read from the user-level config file
+`$XDG_CONFIG_HOME/ops-session/github.toml`, or
+`~/.config/ops-session/github.toml` when `XDG_CONFIG_HOME` is unset. Set
+`private_key_path` there; do not pass private key paths or private key contents
+through CLI arguments or environment variables.
 
 The child command receives `GH_TOKEN` and `GITHUB_TOKEN`. GitHub App credential
 environment variables are removed from the child environment. Shell syntax such
 as pipes or redirects requires an explicit shell:
 
 ```sh
-ops-session github \
+ops-session github-app run \
   --app-id "$GITHUB_APP_ID" \
   --repo OWNER/REPO \
   -- sh -c 'gh issue view 123 | jq .url'
@@ -51,7 +53,7 @@ Git HTTPS remotes need `--git-credentials` so the child process gets a
 temporary Git credential helper:
 
 ```sh
-ops-session github \
+ops-session github-app run \
   --app-id "$GITHUB_APP_ID" \
   --repo OWNER/REPO \
   --permission contents=read \
@@ -59,8 +61,9 @@ ops-session github \
   -- git ls-remote --heads https://github.com/OWNER/REPO.git
 ```
 
-Diagnostic token output is available through `ops-session github app-auth`, but
-normal agent workflows should use `ops-session github ... -- COMMAND`.
+Validate or create the GitHub App auth config with
+`ops-session github-app config check` and
+`ops-session github-app config template`.
 
 See [crates/ops-session/README.md](crates/ops-session/README.md).
 
