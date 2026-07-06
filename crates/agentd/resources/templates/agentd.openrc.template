@@ -1,0 +1,11 @@
+#!/sbin/openrc-run
+
+description="Agent service broker"
+command="{binary}"
+command_args="serve --config-path {config} --socket-path {socket}"
+command_background="yes"
+pidfile="/run/agentd.pid"
+
+depend() {
+    need net
+}

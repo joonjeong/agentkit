@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/ops-session", "crates/ops-runbook"]
+members = ["crates/agentd", "crates/agentctl"]
 resolver = "2"
 
 [workspace.package]

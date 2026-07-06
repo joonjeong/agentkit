@@ -1,4 +1,4 @@
-# ops tools
+# agent tools
 
 Operational tools packaged as Rust binaries.
 
@@ -8,50 +8,76 @@ This repository is a Cargo workspace for small, focused tools:
 
 ```text
 crates/
-  ops-session/  GitHub App-backed command session runner
-  ops-runbook/  config-driven restricted executor for homelab operations
+  agentd/       local service broker for agent tools
+  agentctl/  config-driven restricted executor for homelab operations
 ```
 
 Build individual tools with Cargo:
 
 ```sh
-cargo build --release --bin ops-session
-cargo build --release --bin ops-runbook
+cargo build --release --bin agentd
+cargo build --release --bin agentctl
 ```
 
-## ops-session
+## agentd
 
-`ops-session` runs a child command inside a short-lived GitHub App installation
-token context. For now, GitHub App authentication is the only supported session
-provider.
+`agentd` is a local service broker. It owns system-wide provider profiles and
+long-lived secret access, then serves short-lived credentials and notification
+delivery to local clients over a Unix domain socket.
+
+For now, `agentd` mints GitHub App installation tokens:
+
+```toml
+[github_app]
+api_url = "https://api.github.com"
+default_profile = "codex-review"
+
+[github_app.profiles.codex-review]
+app_id = 123456
+repos = ["OWNER/REPO"]
+
+[github_app.profiles.codex-review.private_key]
+type = "file"
+path = "/etc/agentkit/secrets/codex-review-github-app.private-key.pem"
+
+[github_app.profiles.codex-review.permissions]
+contents = "read"
+pull_requests = "read"
+```
+
+Validate and run the broker with:
 
 ```sh
-ops-session github-app run \
-  --app-id "$GITHUB_APP_ID" \
+agentd config check --config-path /etc/agentkit/agentd.toml
+agentd serve --config-path /etc/agentkit/agentd.toml --socket-path /run/agentd/agentd.sock
+```
+
+## agentctl GitHub App Sessions
+
+`agentctl github-app run` runs a child command inside a short-lived GitHub App installation
+token context obtained from `agentd`. For now, GitHub App authentication is the
+only supported session provider.
+
+```sh
+agentctl github-app run \
+  --profile codex-review \
   --repo OWNER/REPO \
   -- git remote update
 ```
 
-GitHub App credential material is read from the user-level config file
-`$XDG_CONFIG_HOME/ops-session/config.toml`, or
-`~/.config/ops-session/config.toml` when `XDG_CONFIG_HOME` is unset. Set
-`github_app.private_key_path` there; do not pass private key paths or private
-key contents through CLI arguments or environment variables.
-The config file can contain other top-level provider sections; GitHub App
-commands read `[github_app]` and still reject unknown fields inside that section.
-
-When one node hosts multiple agents, define one `[github_app.profiles.<name>]`
-entry per agent and set `OPS_SESSION_GITHUB_PROFILE` in each agent's service
-environment. Profiles isolate repository scope, optional installation IDs, and
-requested token permissions.
+GitHub App credential material is not read by `agentctl`. Keep private keys
+in the system-wide `agentd` config and set `AGENTCTL_GITHUB_PROFILE` in each
+agent's service environment. `agentctl` requests a profile-scoped token from
+`agentd`; `agentd` validates requested repositories and permissions against its
+configured profile before minting the token.
 
 The child command receives `GH_TOKEN` and `GITHUB_TOKEN`. GitHub App credential
 environment variables are removed from the child environment. Shell syntax such
 as pipes or redirects requires an explicit shell:
 
 ```sh
-ops-session github-app run \
-  --app-id "$GITHUB_APP_ID" \
+agentctl github-app run \
+  --profile codex-review \
   --repo OWNER/REPO \
   -- sh -c 'gh issue view 123 | jq .url'
 ```
@@ -60,48 +86,48 @@ Git HTTPS remotes need `--git-credentials` so the child process gets a
 temporary Git credential helper:
 
 ```sh
-ops-session github-app run \
-  --app-id "$GITHUB_APP_ID" \
+agentctl github-app run \
+  --profile codex-review \
   --repo OWNER/REPO \
   --permission contents=read \
   --git-credentials \
   -- git ls-remote --heads https://github.com/OWNER/REPO.git
 ```
 
-Validate the GitHub App auth config or print an example config with
-`ops-session github-app config check` and
-`ops-session github-app config example`.
+Validate broker configuration with `agentd config check`.
 
-See [crates/ops-session/README.md](crates/ops-session/README.md).
+See [crates/agentd/README.md](crates/agentd/README.md) for the broker config
+schema and UDS wire protocol.
 
-## ops-runbook
+## agentctl
 
-`ops-runbook` is a separate binary for allowing automation agents such as
-Hermes or OpenClaw to perform a narrow set of root operations through sudo:
+`agentctl` is a separate binary for allowing automation agents such as
+Hermes or OpenClaw to perform a narrow set of service operations through
+agentd:
 
-- [Installation and usage (English)](docs/ops-runbook-install-usage.en.md)
-- [설치 및 사용법 (한국어)](docs/ops-runbook-install-usage.ko.md)
+- [Installation and usage (English)](docs/agentctl-install-usage.en.md)
+- [설치 및 사용법 (한국어)](docs/agentctl-install-usage.ko.md)
 
 ```sh
-sudo /usr/local/sbin/ops-runbook service restart hermes
-sudo /usr/local/sbin/ops-runbook service start cloudflared
-sudo /usr/local/sbin/ops-runbook service stop tailscale
-sudo /usr/local/sbin/ops-runbook service reload cloudflared
-sudo /usr/local/sbin/ops-runbook service status cloudflared
-sudo /usr/local/sbin/ops-runbook logs hermes --lines 200
-sudo /usr/local/sbin/ops-runbook notify telegram_myriad --severity critical --message "disk full"
-sudo /usr/local/sbin/ops-runbook config check
-sudo /usr/local/sbin/ops-runbook config explain
-sudo /usr/local/sbin/ops-runbook config explain --config-path ./config.toml
-ops-runbook config template --backend openrc --output ./config.toml
+agentctl service restart hermes
+agentctl service start cloudflared
+agentctl service stop tailscale
+agentctl service reload cloudflared
+agentctl service status cloudflared
+agentctl service logs hermes --lines 200
+agentctl telegram notify myriad --chat-id 123456789 --severity critical --message "disk full"
+agentctl config check
+agentctl config explain
+agentctl config explain --config-path ./config.toml
+agentctl config template --backend openrc --output ./config.toml
 ```
 
-See [crates/ops-runbook/README.md](crates/ops-runbook/README.md).
+See [crates/agentctl/README.md](crates/agentctl/README.md).
 
 ## Releases
 
 The release workflow creates HeadVer-tagged GitHub releases with
-`ops-session` binaries for `x86_64-unknown-linux-musl`,
+`agentd` and `agentctl` binaries for `x86_64-unknown-linux-musl`,
 `aarch64-unknown-linux-musl`, and `aarch64-apple-darwin`. Linux assets are
 statically linked musl binaries so they do not depend on the host system's
 glibc version.

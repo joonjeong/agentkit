@@ -1,0 +1,13 @@
+[Unit]
+Description=Agent service broker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart={binary} serve --config-path {config} --socket-path {socket}
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

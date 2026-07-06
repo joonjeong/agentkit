@@ -47,4 +47,4 @@ jobs:
       os: ${{ matrix.os }}
       target: ${{ matrix.target }}
       build_tool: ${{ matrix.build_tool }}
-      ops_session_version: ci
+      release_version: ci
