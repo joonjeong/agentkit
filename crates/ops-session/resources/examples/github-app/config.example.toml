@@ -3,9 +3,9 @@ app_id = 123456
 api_url = "https://api.github.com"
 default_profile = "codex-review"
 
-# Runs read user config first, then /etc/ops-session/config.toml.
-# For shared agent hosts, place private keys under /etc/ops-session/secrets
-# with permissions such as root:ops-agent 0640, and run agents as users in
+# agentd reads system-wide config from /etc/agentd/config.toml.
+# For shared agent hosts, place private keys under /etc/agentd/secrets
+# with permissions such as root:agentd 0640, and run agentd as a user in
 # that group.
 
 [github_app.profiles.codex-review]
@@ -13,7 +13,7 @@ repos = ["OWNER/REPO"]
 
 [github_app.profiles.codex-review.private_key]
 type = "file"
-path = "/etc/ops-session/secrets/codex-review-github-app.private-key.pem"
+path = "/etc/agentd/secrets/codex-review-github-app.private-key.pem"
 
 [github_app.profiles.codex-review.permissions]
 contents = "read"
@@ -25,7 +25,7 @@ repos = ["OWNER/REPO"]
 
 [github_app.profiles.codex-maintainer.private_key]
 type = "file"
-path = "/etc/ops-session/secrets/codex-maintainer-github-app.private-key.pem"
+path = "/etc/agentd/secrets/codex-maintainer-github-app.private-key.pem"
 
 [github_app.profiles.codex-maintainer.permissions]
 contents = "write"

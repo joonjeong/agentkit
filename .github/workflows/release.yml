@@ -63,14 +63,32 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
             asset: ops-session-x86_64-unknown-linux-musl
+            binary: ops-session
             build_tool: cargo-zigbuild
           - os: ubuntu-latest
             target: aarch64-unknown-linux-musl
             asset: ops-session-aarch64-unknown-linux-musl
+            binary: ops-session
             build_tool: cargo-zigbuild
           - os: macos-14
             target: aarch64-apple-darwin
             asset: ops-session-aarch64-apple-darwin
+            binary: ops-session
+            build_tool: cargo
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            asset: agentd-x86_64-unknown-linux-musl
+            binary: agentd
+            build_tool: cargo-zigbuild
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            asset: agentd-aarch64-unknown-linux-musl
+            binary: agentd
+            build_tool: cargo-zigbuild
+          - os: macos-14
+            target: aarch64-apple-darwin
+            asset: agentd-aarch64-apple-darwin
+            binary: agentd
             build_tool: cargo
     uses: ./.github/workflows/build.yml
     with:
@@ -78,6 +96,7 @@ jobs:
       target: ${{ matrix.target }}
       build_tool: ${{ matrix.build_tool }}
       ops_session_version: ${{ needs.prepare.outputs.release_version }}
+      binary_name: ${{ matrix.binary }}
       ref: ${{ needs.prepare.outputs.target_sha }}
       artifact_name: ${{ matrix.asset }}-${{ needs.prepare.outputs.asset_suffix }}
       upload_artifact: true

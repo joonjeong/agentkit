@@ -1,7 +1,7 @@
 # ops-session
 
-`ops-session` runs a command inside an authenticated provider session. The
-current provider is GitHub App authentication:
+`ops-session` runs a command inside an authenticated provider session obtained
+from `agentd`. The current provider is GitHub App authentication:
 
 ```sh
 ops-session github-app run \
@@ -9,14 +9,8 @@ ops-session github-app run \
   -- git remote update
 ```
 
-GitHub credentials are read from a config file. Runs read
-`$XDG_CONFIG_HOME/ops-session/config.toml`, or
-`~/.config/ops-session/config.toml` when `XDG_CONFIG_HOME` is unset, before
-using the system config at `/etc/ops-session/config.toml`. Override it with
-`--config-path` or `OPS_SESSION_GITHUB_CONFIG_PATH` for local checks and
-development runs.
-The top level of this file may contain multiple provider sections; GitHub App
-settings live under `[github_app]`.
+GitHub credentials are read by `agentd`, not by `ops-session`. Put provider
+profiles in the system-wide broker config at `/etc/agentd/config.toml`:
 
 ```toml
 [github_app]
@@ -29,7 +23,7 @@ repos = ["OWNER/REPO"]
 
 [github_app.profiles.codex-review.private_key]
 type = "file"
-path = "/etc/ops-session/secrets/codex-review-github-app.private-key.pem"
+path = "/etc/agentd/secrets/codex-review-github-app.private-key.pem"
 
 [github_app.profiles.codex-review.permissions]
 contents = "read"
@@ -60,19 +54,14 @@ For a simple local secret store, keep private keys in files readable by the
 agent users' group, for example:
 
 ```sh
-sudo chown root:ops-agent /etc/ops-session/secrets/codex-review-github-app.private-key.pem
-sudo chmod 0640 /etc/ops-session/secrets/codex-review-github-app.private-key.pem
+sudo chown root:agentd /etc/agentd/secrets/codex-review-github-app.private-key.pem
+sudo chmod 0640 /etc/agentd/secrets/codex-review-github-app.private-key.pem
 ```
 
-`--profile`, `OPS_SESSION_GITHUB_PROFILE`, `--app-id`, `GITHUB_APP_ID`, `--installation-id`,
-`GITHUB_APP_INSTALLATION_ID`, `--api-url`, `GITHUB_API_URL`, `--repo`, and
-`--permission` can override non-secret config values. Private keys are read
-from `[github_app.profiles.<profile>.private_key]`. `type = "file"` paths and
-`type = "command"` commands must be absolute. Command sources are executed
-without a shell and use stdout as the private key.
-Unknown top-level provider sections are ignored by the GitHub App commands, but
-unknown fields inside `[github_app]` are rejected so GitHub configuration typos
-fail fast.
+`--profile` or `OPS_SESSION_GITHUB_PROFILE` selects the agentd profile.
+`--repo OWNER/REPO` and `--permission key=value` request a subset of that
+profile's configured scope. `agentd` rejects requests outside the profile
+instead of letting `ops-session` override system configuration.
 
 The child command inherits stdin, stdout, stderr, the current working directory,
 `PATH`, and ordinary environment variables. The scoped installation token is
@@ -84,14 +73,8 @@ Useful options:
   `OPS_SESSION_GITHUB_PROFILE` for long-running agent services.
 - `--git-credentials` configures a child-only Git credential helper for HTTPS
   GitHub remotes.
-- `--token-cache` opts into reusing a valid cached installation token.
 - `--repo OWNER/REPO` and `--permission key=value` can override profile
-  repository and permission scope.
-
-Token caching is disabled by default. When enabled, cache keys include the config
-path, selected profile, app, installation, API URL, repository list, and
-permissions. This keeps cached tokens isolated between agent profiles on the
-same Unix account.
+  repository and permission scope only when agentd allows that subset.
 
 Shell syntax such as pipes, redirects, aliases, and shell functions requires an
 explicit shell command:
@@ -105,10 +88,8 @@ ops-session github-app run \
 `ops-session` exits with the child process exit code, so it can be used directly
 in automation.
 
-Validate the GitHub App auth config when needed:
+Validate the broker config when needed:
 
 ```sh
-ops-session github-app config check
+agentd config check --config-path /etc/agentd/config.toml
 ```
-
-Print an example config with `ops-session github-app config example`.

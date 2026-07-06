@@ -7,32 +7,28 @@ description: Run agent commands through ops-session provider sessions so app-aut
 
 Use this skill when an agent needs temporary provider credentials for a command
 without exporting long-lived secrets into the parent shell. `ops-session` is a
-provider-scoped session runner: it resolves an app-auth context, mints a
-short-lived credential, injects that credential into one child process, and then
-lets the process exit normally.
+provider-scoped session runner: it asks `agentd` for an app-auth context,
+injects the short-lived credential into one child process, and then lets the
+process exit normally.
 
 The current provider is GitHub App authentication:
 
 ```sh
 ops-session github-app run [OPTIONS] -- COMMAND [ARG]...
-ops-session github-app config check
-ops-session github-app config example
+agentd config check --config-path /etc/agentd/config.toml
 ops-session agent-skill --install-path /path/to/skills
 ```
 
 Future providers should follow the same boundary: provider credentials come from
-the ops-session config, the minted session credential is scoped to the child
-command, and provider-specific secret material is not passed through argv or the
-ambient environment.
+agentd's system-wide config, the minted session credential is scoped to the
+child command, and provider-specific secret material is not passed through argv
+or the ambient environment.
 
 ## Configuration
 
-Runs read `$XDG_CONFIG_HOME/ops-session/config.toml`, or
-`~/.config/ops-session/config.toml` when `XDG_CONFIG_HOME` is unset, before
-using the system config at `/etc/ops-session/config.toml`. Provider settings
-are namespaced so one file can hold multiple app-auth providers. Use
-`--config-path` or `OPS_SESSION_GITHUB_CONFIG_PATH` for local checks and
-development runs.
+`agentd` reads system-wide provider settings from `/etc/agentd/config.toml`.
+Use `agentd config check --config-path PATH` for local checks and development
+runs.
 
 For GitHub App sessions:
 
@@ -47,7 +43,7 @@ repos = ["OWNER/REPO"]
 
 [github_app.profiles.codex-review.private_key]
 type = "file"
-path = "/etc/ops-session/secrets/codex-review-github-app.private-key.pem"
+path = "/etc/agentd/secrets/codex-review-github-app.private-key.pem"
 
 [github_app.profiles.codex-review.permissions]
 contents = "read"
@@ -79,9 +75,8 @@ without a shell and use stdout as the private key. Do not pass private key paths
 or private key contents through shell arguments or environment variables.
 
 For a simple local secret store, keep private key files readable by the agent
-users' group, for example `root:ops-agent` with mode `0640`. `ops-session` does
-not elevate privileges or switch users; it can only read files that the current
-agent process is allowed to read.
+broker user's group, for example `root:agentd` with mode `0640`. `ops-session`
+does not read private keys; it only talks to the local broker socket.
 
 ## GitHub App Sessions
 
@@ -106,14 +101,11 @@ Profile selection can be configured per invocation:
 
 - `--profile NAME` or `OPS_SESSION_GITHUB_PROFILE`
 
-These non-secret values can be overridden per invocation:
+These non-secret values can be requested per invocation. agentd rejects requests
+outside the selected profile's configured scope:
 
-- `--app-id` or `GITHUB_APP_ID`
-- `--installation-id` or `GITHUB_APP_INSTALLATION_ID`
-- `--api-url` or `GITHUB_API_URL`
 - `--repo OWNER/REPO`
 - `--permission key=value`
-- `--token-cache`
 
 ## Agent Workflow
 
@@ -123,7 +115,7 @@ These non-secret values can be overridden per invocation:
    commands require an explicit shell command.
 4. Add provider-specific helpers only when needed, such as `--git-credentials`
    for HTTPS Git operations.
-5. Run the provider config check after changing the ops-session config.
+5. Run `agentd config check` after changing the broker config.
 
 For shell syntax:
 
@@ -148,13 +140,10 @@ PATH, and ordinary environment variables.
 
 ## Operational Notes
 
-- Treat `ops-session` as a boundary tool: secrets in config, temporary
+- Treat `ops-session` as a boundary tool: secrets in agentd config, temporary
   credentials in one child process.
 - Scope tokens as narrowly as the provider allows.
 - Request only the permissions needed by the child command.
-- Token caching is disabled by default. If `--token-cache` is used, the
-  selected profile is part of the cache key, so separate agent profiles keep
-  cached credentials isolated on a shared Unix account.
 - Provider HTTP clients should use finite timeouts, and provider JWTs or similar
   assertions should remain below upstream maximum lifetimes with clock skew
   accounted for.

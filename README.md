@@ -8,6 +8,7 @@ This repository is a Cargo workspace for small, focused tools:
 
 ```text
 crates/
+  agentd/       local credential broker for agent tools
   ops-session/  GitHub App-backed command session runner
   ops-runbook/  config-driven restricted executor for homelab operations
 ```
@@ -15,39 +16,62 @@ crates/
 Build individual tools with Cargo:
 
 ```sh
+cargo build --release --bin agentd
 cargo build --release --bin ops-session
 cargo build --release --bin ops-runbook
+```
+
+## agentd
+
+`agentd` is a local credential broker. It owns system-wide provider profiles and
+long-lived secret access, then serves short-lived credentials to local clients
+over a Unix domain socket.
+
+For now, `agentd` mints GitHub App installation tokens:
+
+```toml
+[github_app]
+app_id = 123456
+api_url = "https://api.github.com"
+default_profile = "codex-review"
+
+[github_app.profiles.codex-review]
+repos = ["OWNER/REPO"]
+
+[github_app.profiles.codex-review.private_key]
+type = "file"
+path = "/etc/agentd/secrets/codex-review-github-app.private-key.pem"
+
+[github_app.profiles.codex-review.permissions]
+contents = "read"
+pull_requests = "read"
+```
+
+Validate and run the broker with:
+
+```sh
+agentd config check --config-path /etc/agentd/config.toml
+agentd serve --config-path /etc/agentd/config.toml --socket-path /run/agentd/agentd.sock
 ```
 
 ## ops-session
 
 `ops-session` runs a child command inside a short-lived GitHub App installation
-token context. For now, GitHub App authentication is the only supported session
-provider.
+token context obtained from `agentd`. For now, GitHub App authentication is the
+only supported session provider.
 
 ```sh
 ops-session github-app run \
-  --app-id "$GITHUB_APP_ID" \
+  --profile codex-review \
   --repo OWNER/REPO \
   -- git remote update
 ```
 
-GitHub App credential material is read from a config file. Runs read
-`$XDG_CONFIG_HOME/ops-session/config.toml`, or
-`~/.config/ops-session/config.toml` when `XDG_CONFIG_HOME` is unset, before
-falling back to `/etc/ops-session/config.toml`. Private keys are configured
-under each `[github_app.profiles.<name>.private_key]` source; do not pass
-private key paths or private key contents through CLI arguments or environment
-variables.
-The config file can contain other top-level provider sections; GitHub App
-commands read `[github_app]` and still reject unknown fields inside that section.
-
-When one node hosts multiple agents, define one `[github_app.profiles.<name>]`
-entry per agent and set `OPS_SESSION_GITHUB_PROFILE` in each agent's service
-environment. Profiles isolate repository scope, optional installation IDs, and
-requested token permissions. A simple local secret store is a private key file
-owned by `root:ops-agent` with mode `0640`, read by agent users that belong to
-the `ops-agent` group.
+GitHub App credential material is not read by `ops-session`. Keep private keys
+in the system-wide `agentd` config and set `OPS_SESSION_GITHUB_PROFILE` in each
+agent's service environment. `ops-session` requests a profile-scoped token from
+`agentd`; `agentd` validates requested repositories and permissions against its
+configured profile before minting the token.
 
 The child command receives `GH_TOKEN` and `GITHUB_TOKEN`. GitHub App credential
 environment variables are removed from the child environment. Shell syntax such
@@ -55,7 +79,7 @@ as pipes or redirects requires an explicit shell:
 
 ```sh
 ops-session github-app run \
-  --app-id "$GITHUB_APP_ID" \
+  --profile codex-review \
   --repo OWNER/REPO \
   -- sh -c 'gh issue view 123 | jq .url'
 ```
@@ -65,16 +89,14 @@ temporary Git credential helper:
 
 ```sh
 ops-session github-app run \
-  --app-id "$GITHUB_APP_ID" \
+  --profile codex-review \
   --repo OWNER/REPO \
   --permission contents=read \
   --git-credentials \
   -- git ls-remote --heads https://github.com/OWNER/REPO.git
 ```
 
-Validate the GitHub App auth config or print an example config with
-`ops-session github-app config check` and
-`ops-session github-app config example`.
+Validate broker configuration with `agentd config check`.
 
 See [crates/ops-session/README.md](crates/ops-session/README.md).
 
@@ -105,7 +127,7 @@ See [crates/ops-runbook/README.md](crates/ops-runbook/README.md).
 ## Releases
 
 The release workflow creates HeadVer-tagged GitHub releases with
-`ops-session` binaries for `x86_64-unknown-linux-musl`,
+`agentd` and `ops-session` binaries for `x86_64-unknown-linux-musl`,
 `aarch64-unknown-linux-musl`, and `aarch64-apple-darwin`. Linux assets are
 statically linked musl binaries so they do not depend on the host system's
 glibc version.

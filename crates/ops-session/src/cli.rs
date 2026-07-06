@@ -17,8 +17,6 @@ const VERSION: &str = match option_env!("OPS_SESSION_VERSION") {
 #[command(about = "Run a command in an authenticated operations session")]
 #[command(after_long_help = "Invocation forms:
   ops-session github-app run [OPTIONS] -- COMMAND [ARG]...
-  ops-session github-app config check
-  ops-session github-app config example
   ops-session agent-skill --install-path DIR
 
 For now, GitHub App authentication is the only supported session provider.")]

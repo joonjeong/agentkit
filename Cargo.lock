@@ -3,6 +3,22 @@
 version = 4
 
 [[package]]
+name = "agentd"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "assert_cmd",
+ "clap",
+ "jsonwebtoken",
+ "predicates",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "time",
+ "toml",
+]
+
+[[package]]
 name = "aho-corasick"
 version = "1.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -992,16 +1008,11 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
- "base64",
  "clap",
- "jsonwebtoken",
  "predicates",
  "reqwest",
  "serde",
  "serde_json",
- "sha2",
- "time",
- "toml",
 ]
 
 [[package]]
