@@ -4,8 +4,8 @@
 profiles and long-lived secret access, then serves short-lived credentials and
 notification delivery to local clients over a Unix domain socket.
 
-For now, the supported providers are GitHub App authentication and Telegram or
-Discord notification delivery.
+For now, the supported providers are GitHub App authentication, Telegram or
+Discord notification delivery, and allowlisted service control.
 
 ## Configuration
 
@@ -35,6 +35,15 @@ path = "/etc/agentkit/secrets/telegram-bot-token"
 [discord.profiles.myriad.webhook]
 type = "file"
 path = "/etc/agentkit/secrets/discord-webhook-url"
+
+[service]
+backend = "systemd"
+max_log_lines = 1000
+
+[service.callers.hermes]
+uids = [1001]
+service_control = ["hermes", "cloudflared", "tailscale"]
+service_read = ["hermes", "cloudflared", "tailscale"]
 ```
 
 Validate and run the broker with:
@@ -105,3 +114,19 @@ Discord profiles require `[discord.profiles.<name>.webhook]`. Notification
 secrets use the same typed source shape as GitHub App private keys:
 `type = "file"` with `path`, or `type = "command"` with `command` and optional
 `args`.
+
+Service request:
+
+```json
+{"version":1,"type":"service","action":"restart","service":"hermes","lines":null}
+```
+
+Successful service response:
+
+```json
+{"status":"ok","version":1,"exit_code":0,"stdout":"","stderr":""}
+```
+
+Service authorization is based on Unix-domain-socket peer credentials. agentd
+maps the connecting process uid/gid to `[service.callers.<name>]` entries and
+rejects service targets outside `service_control` or `service_read`.

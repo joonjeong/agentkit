@@ -13,11 +13,8 @@ use crate::policy::validate_caller;
 const DEFAULT_BINARY_PATH: &str = "/usr/local/sbin/agentctl";
 const DEFAULT_GROUP: &str = "agent";
 const DEFAULT_LOGROTATE_PATH: &str = "/etc/logrotate.d/agentctl";
-const DEFAULT_SUDOERS_PATH: &str = "/etc/sudoers.d/agent";
-const DEFAULT_SUDO_LOG_PATH: &str = "/var/log/agentctl/sudo.log";
 const CONFIG_TEMPLATE: &str = include_str!("../resources/templates/config.agentctl.toml.template");
 const LOGROTATE_TEMPLATE: &str = include_str!("../resources/templates/logrotate.agentctl.template");
-const SUDOERS_TEMPLATE: &str = include_str!("../resources/templates/sudoers.agent.template");
 
 #[derive(Debug, Args)]
 pub struct BootstrapArgs {
@@ -37,13 +34,9 @@ pub struct BootstrapArgs {
     #[arg(long)]
     source_binary: Option<PathBuf>,
 
-    /// Installed agentctl path referenced from sudoers.
+    /// Installed agentctl path.
     #[arg(long, default_value = DEFAULT_BINARY_PATH)]
     binary_path: PathBuf,
-
-    /// Sudoers file to create or replace.
-    #[arg(long, default_value = DEFAULT_SUDOERS_PATH)]
-    sudoers_path: PathBuf,
 
     /// Config file to create when missing.
     #[arg(long, default_value = DEFAULT_CONFIG_PATH)]
@@ -52,10 +45,6 @@ pub struct BootstrapArgs {
     /// Audit log path used by agentctl.
     #[arg(long, default_value = audit::DEFAULT_AUDIT_LOG_PATH)]
     audit_log_path: PathBuf,
-
-    /// Sudo output log path embedded in sudoers.
-    #[arg(long, default_value = DEFAULT_SUDO_LOG_PATH)]
-    sudo_log_path: PathBuf,
 
     /// Logrotate config path to create or replace.
     #[arg(long, default_value = DEFAULT_LOGROTATE_PATH)]
@@ -72,10 +61,6 @@ pub struct BootstrapArgs {
     /// Do not create the group or update user group membership.
     #[arg(long)]
     skip_system_accounts: bool,
-
-    /// Do not validate the generated sudoers file with visudo.
-    #[arg(long)]
-    skip_visudo: bool,
 }
 
 pub fn run(args: BootstrapArgs) -> Result<i32> {
@@ -102,8 +87,6 @@ pub fn run(args: BootstrapArgs) -> Result<i32> {
 
     ensure_parent_dir(&args.config_path, 0o755)?;
     ensure_parent_dir(&args.audit_log_path, 0o755)?;
-    ensure_parent_dir(&args.sudo_log_path, 0o755)?;
-    ensure_parent_dir(&args.sudoers_path, 0o755)?;
     ensure_parent_dir(&args.logrotate_path, 0o755)?;
 
     write_if_missing_or_forced(
@@ -114,11 +97,7 @@ pub fn run(args: BootstrapArgs) -> Result<i32> {
     )?;
     println!("config ready: {}", args.config_path.display());
 
-    let sudoers = sudoers_contents(&args);
-    write_sudoers(&args.sudoers_path, sudoers.as_bytes(), args.skip_visudo)?;
-    println!("sudoers ready: {}", args.sudoers_path.display());
-
-    let logrotate = logrotate_contents(&args.audit_log_path, &args.sudo_log_path);
+    let logrotate = logrotate_contents(&args.audit_log_path);
     write_atomic(&args.logrotate_path, logrotate.as_bytes(), 0o644)?;
     println!("logrotate ready: {}", args.logrotate_path.display());
 
@@ -148,10 +127,8 @@ fn validate_args(args: &BootstrapArgs) -> Result<()> {
         validate_path_option("source-binary", source_binary, PathKind::Command)?;
     }
     validate_path_option("binary-path", &args.binary_path, PathKind::Command)?;
-    validate_path_option("sudoers-path", &args.sudoers_path, PathKind::Config)?;
     validate_path_option("config-path", &args.config_path, PathKind::Config)?;
     validate_path_option("audit-log-path", &args.audit_log_path, PathKind::Config)?;
-    validate_path_option("sudo-log-path", &args.sudo_log_path, PathKind::Config)?;
     validate_path_option("logrotate-path", &args.logrotate_path, PathKind::Config)?;
     Ok(())
 }
@@ -288,35 +265,6 @@ fn write_if_missing_or_forced(path: &Path, contents: &[u8], mode: u32, force: bo
     write_atomic(path, contents, mode)
 }
 
-fn write_sudoers(path: &Path, contents: &[u8], skip_visudo: bool) -> Result<()> {
-    let temp_path = temporary_path(path);
-    fs::write(&temp_path, contents).map_err(|source| Error::Io {
-        path: temp_path.clone(),
-        source,
-    })?;
-    set_mode(&temp_path, 0o440)?;
-
-    if !skip_visudo {
-        let program = command_path("AGENTCTL_VISUDO_PATH", "/usr/sbin/visudo");
-        let status = Command::new(&program)
-            .arg("-cf")
-            .arg(&temp_path)
-            .status()
-            .map_err(Error::CommandStart)?;
-        if !status.success() {
-            return Err(Error::CommandFailed {
-                program: program.display().to_string(),
-                args: format!("-cf {}", temp_path.display()),
-            });
-        }
-    }
-
-    fs::rename(&temp_path, path).map_err(|source| Error::Io {
-        path: path.to_owned(),
-        source,
-    })
-}
-
 fn write_atomic(path: &Path, contents: &[u8], mode: u32) -> Result<()> {
     let temp_path = temporary_path(path);
     fs::write(&temp_path, contents).map_err(|source| Error::Io {
@@ -351,21 +299,8 @@ fn set_mode(_path: &Path, _mode: u32) -> Result<()> {
     Ok(())
 }
 
-fn sudoers_contents(args: &BootstrapArgs) -> String {
-    let group = &args.group;
-    let binary = args.binary_path.display();
-    let sudo_log = args.sudo_log_path.display();
-
-    SUDOERS_TEMPLATE
-        .replace("{group}", group)
-        .replace("{binary}", &binary.to_string())
-        .replace("{sudo_log}", &sudo_log.to_string())
-}
-
-fn logrotate_contents(audit_log_path: &Path, sudo_log_path: &Path) -> String {
-    LOGROTATE_TEMPLATE
-        .replace("{audit_log}", &audit_log_path.display().to_string())
-        .replace("{sudo_log}", &sudo_log_path.display().to_string())
+fn logrotate_contents(audit_log_path: &Path) -> String {
+    LOGROTATE_TEMPLATE.replace("{audit_log}", &audit_log_path.display().to_string())
 }
 
 pub(crate) fn sample_config(backend: Backend) -> String {

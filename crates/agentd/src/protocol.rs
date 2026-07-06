@@ -28,6 +28,12 @@ pub(crate) enum WireRequest {
         title: Option<String>,
         message: String,
     },
+    Service {
+        version: u32,
+        action: String,
+        service: String,
+        lines: Option<u32>,
+    },
 }
 
 #[derive(Debug, Serialize)]
@@ -41,6 +47,12 @@ pub(crate) enum WireResponse {
         expires_at: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         api_url: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        exit_code: Option<i32>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        stdout: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        stderr: Option<String>,
     },
     Error {
         version: u32,
@@ -68,6 +80,9 @@ impl WireResponse {
             token: Some(token),
             expires_at,
             api_url: Some(api_url),
+            exit_code: None,
+            stdout: None,
+            stderr: None,
         }
     }
 
@@ -77,6 +92,21 @@ impl WireResponse {
             token: None,
             expires_at: None,
             api_url: None,
+            exit_code: None,
+            stdout: None,
+            stderr: None,
+        }
+    }
+
+    pub(crate) fn service(exit_code: i32, stdout: String, stderr: String) -> Self {
+        Self::Ok {
+            version: WIRE_PROTOCOL_VERSION,
+            token: None,
+            expires_at: None,
+            api_url: None,
+            exit_code: Some(exit_code),
+            stdout: Some(stdout),
+            stderr: Some(stderr),
         }
     }
 

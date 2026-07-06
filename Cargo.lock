@@ -27,6 +27,7 @@ dependencies = [
  "assert_cmd",
  "clap",
  "jsonwebtoken",
+ "libc",
  "predicates",
  "reqwest",
  "serde",

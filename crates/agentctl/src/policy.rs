@@ -60,9 +60,3 @@ pub fn allowed_targets(policy: &CallerPolicy, action: Action) -> &[String] {
         Action::Notify => &[],
     }
 }
-
-pub fn is_allowed(policy: &CallerPolicy, action: Action, target: &str) -> bool {
-    allowed_targets(policy, action)
-        .iter()
-        .any(|allowed| allowed == target)
-}

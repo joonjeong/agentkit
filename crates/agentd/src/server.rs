@@ -8,7 +8,9 @@ use anyhow::{Context, Result};
 use crate::config::AgentdConfigFile;
 use crate::github;
 use crate::notification::{self, Notification};
+use crate::peer::{self, PeerIdentity};
 use crate::protocol::{WireRequest, WireResponse};
+use crate::service;
 
 pub(crate) fn serve(config: AgentdConfigFile, socket_path: &Path, once: bool) -> Result<()> {
     if let Some(parent) = socket_path.parent() {
@@ -42,6 +44,7 @@ pub(crate) fn serve(config: AgentdConfigFile, socket_path: &Path, once: bool) ->
 }
 
 fn handle_stream(stream: UnixStream, config: &AgentdConfigFile) -> Result<()> {
+    let peer = peer::identity(&stream)?;
     let mut writer = stream
         .try_clone()
         .context("failed to clone agentd client stream")?;
@@ -52,7 +55,7 @@ fn handle_stream(stream: UnixStream, config: &AgentdConfigFile) -> Result<()> {
         .context("failed to read agentd request")?;
 
     let response = match serde_json::from_str::<WireRequest>(&line) {
-        Ok(request) => match handle_request(request, config) {
+        Ok(request) => match handle_request(request, config, &peer) {
             Ok(response) => response,
             Err(error) => WireResponse::error(format!("{error:#}")),
         },
@@ -66,7 +69,11 @@ fn handle_stream(stream: UnixStream, config: &AgentdConfigFile) -> Result<()> {
     Ok(())
 }
 
-fn handle_request(request: WireRequest, config: &AgentdConfigFile) -> Result<WireResponse> {
+fn handle_request(
+    request: WireRequest,
+    config: &AgentdConfigFile,
+    peer: &PeerIdentity,
+) -> Result<WireResponse> {
     match request {
         WireRequest::GithubAppToken {
             version,
@@ -134,6 +141,24 @@ fn handle_request(request: WireRequest, config: &AgentdConfigFile) -> Result<Wir
                 }
             }
             Ok(WireResponse::ok())
+        }
+        WireRequest::Service {
+            version,
+            action,
+            service: target,
+            lines,
+        } => {
+            WireRequest::validate_version(version)?;
+            let service_config = config
+                .service
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("service control is not configured"))?;
+            let output = service::run(service_config, peer, &action, &target, lines)?;
+            Ok(WireResponse::service(
+                output.exit_code,
+                output.stdout,
+                output.stderr,
+            ))
         }
     }
 }

@@ -1,19 +1,19 @@
 # agentctl
 
-`agentctl` is a config-driven restricted executor for homelab operations.
-Agents in the `agent` Unix group can run only the operations listed in
-`/etc/agentkit/agentctl.toml` through sudo:
+`agentctl` is a restricted client for homelab operations. Service control is
+delegated to `agentd` over a Unix domain socket, where peer credentials and the
+system-wide agentd config decide what may run.
 
 - [Installation and usage (English)](../../docs/agentctl-install-usage.en.md)
 - [설치 및 사용법 (한국어)](../../docs/agentctl-install-usage.ko.md)
 
 ```sh
-sudo /usr/local/sbin/agentctl service restart hermes
-sudo /usr/local/sbin/agentctl service start cloudflared
-sudo /usr/local/sbin/agentctl service stop tailscale
-sudo /usr/local/sbin/agentctl service reload cloudflared
-sudo /usr/local/sbin/agentctl service status cloudflared
-sudo /usr/local/sbin/agentctl service logs hermes --lines 200
+agentctl service restart hermes
+agentctl service start cloudflared
+agentctl service stop tailscale
+agentctl service reload cloudflared
+agentctl service status cloudflared
+agentctl service logs hermes --lines 200
 sudo /usr/local/sbin/agentctl telegram notify myriad --chat-id 123456789 --severity critical --message "disk full"
 sudo /usr/local/sbin/agentctl config check
 sudo /usr/local/sbin/agentctl config explain
@@ -22,14 +22,10 @@ agentctl config template --backend openrc --output ./config.toml
 ```
 
 The binary never exposes `exec`, `shell`, raw `systemctl`, raw `apt`, or
-`ansible-playbook` commands. It reads the original caller from `SUDO_USER`,
-rejects direct root execution, validates the target name, checks the caller's
-allowlist, writes `/var/log/agentctl/audit.log`, and then executes a fixed
-service-manager command path without going through a shell. It can also send
-allowlisted notifications by delegating to `agentd` over a Unix domain socket,
-without exposing provider credentials to the caller. The default backend is
-`systemd`; Alpine/OpenRC service control can be enabled with `backend = "openrc"`
-in the config defaults.
+`ansible-playbook` commands. Service requests are sent to `agentd`, which
+validates the peer uid/gid, checks its service allowlist, and executes a fixed
+service-manager command path without going through a shell. Notifications are
+also delegated to `agentd` without exposing provider credentials to the caller.
 
 Build:
 
@@ -44,22 +40,15 @@ sudo ./agentctl bootstrap --user hermes
 ```
 
 `config template` prints an example config by default and can write one with
-`--output`; it is intended for administrators and is not included in the
-generated sudoers rule.
+`--output`; it is intended for administrators.
 The config text is rendered from
 `crates/agentctl/resources/templates/config.agentctl.toml.template`.
 
 `bootstrap` installs the current executable to `/usr/local/sbin/agentctl`,
 creates the `agent` group, adds existing `--user` accounts to the group,
-writes the default config, writes sudoers, and writes logrotate config. The
-sudoers rule is rendered from
-`crates/agentctl/resources/templates/sudoers.agent.template`.
-
-The generated sudoers rule grants only:
-
-```sudoers
-%agent ALL=(root) NOPASSWD: /usr/local/sbin/agentctl service start *, /usr/local/sbin/agentctl service stop *, /usr/local/sbin/agentctl service restart *, /usr/local/sbin/agentctl service reload *, /usr/local/sbin/agentctl service status *, /usr/local/sbin/agentctl service logs *, /usr/local/sbin/agentctl telegram notify *, /usr/local/sbin/agentctl discord notify *, /usr/local/sbin/agentctl config check, /usr/local/sbin/agentctl config check *, /usr/local/sbin/agentctl config explain, /usr/local/sbin/agentctl config explain *, /usr/local/sbin/agentctl version
-```
+writes the default config, and writes logrotate config. Service control does
+not require sudo for `agentctl`; access is gated by the agentd socket and
+agentd peer-credential policy.
 
 Useful bootstrap options:
 
@@ -67,8 +56,6 @@ Useful bootstrap options:
 - `--source-binary /path/to/agentctl`
 - `--backend systemd`
 - `--backend openrc`
-- `--sudoers-path /etc/sudoers.d/agent`
 - `--config-path /etc/agentkit/agentctl.toml`
 - `--audit-log-path /var/log/agentctl/audit.log`
-- `--sudo-log-path /var/log/agentctl/sudo.log`
 - `--group agent`

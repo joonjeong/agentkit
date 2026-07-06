@@ -6,6 +6,6 @@ mod error;
 mod github;
 mod notification;
 mod policy;
-mod runner;
+mod service;
 
 pub use cli::run;

@@ -1,4 +1,4 @@
-{audit_log} {sudo_log} {
+{audit_log} {
     weekly
     rotate 8
     compress

@@ -2,8 +2,10 @@ mod bootstrap;
 mod config;
 mod github;
 mod notification;
+mod peer;
 mod protocol;
 mod server;
+mod service;
 
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -114,6 +116,9 @@ fn config(args: ConfigArgs) -> Result<()> {
             }
             if let Some(discord) = config.discord {
                 println!("discord profiles: {}", discord.profiles.len());
+            }
+            if let Some(service) = config.service {
+                println!("service callers: {}", service.callers.len());
             }
             Ok(())
         }

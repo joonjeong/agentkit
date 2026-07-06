@@ -102,22 +102,23 @@ schema and UDS wire protocol.
 ## agentctl
 
 `agentctl` is a separate binary for allowing automation agents such as
-Hermes or OpenClaw to perform a narrow set of root operations through sudo:
+Hermes or OpenClaw to perform a narrow set of service operations through
+agentd:
 
 - [Installation and usage (English)](docs/agentctl-install-usage.en.md)
 - [설치 및 사용법 (한국어)](docs/agentctl-install-usage.ko.md)
 
 ```sh
-sudo /usr/local/sbin/agentctl service restart hermes
-sudo /usr/local/sbin/agentctl service start cloudflared
-sudo /usr/local/sbin/agentctl service stop tailscale
-sudo /usr/local/sbin/agentctl service reload cloudflared
-sudo /usr/local/sbin/agentctl service status cloudflared
-sudo /usr/local/sbin/agentctl service logs hermes --lines 200
-sudo /usr/local/sbin/agentctl telegram notify myriad --chat-id 123456789 --severity critical --message "disk full"
-sudo /usr/local/sbin/agentctl config check
-sudo /usr/local/sbin/agentctl config explain
-sudo /usr/local/sbin/agentctl config explain --config-path ./config.toml
+agentctl service restart hermes
+agentctl service start cloudflared
+agentctl service stop tailscale
+agentctl service reload cloudflared
+agentctl service status cloudflared
+agentctl service logs hermes --lines 200
+agentctl telegram notify myriad --chat-id 123456789 --severity critical --message "disk full"
+agentctl config check
+agentctl config explain
+agentctl config explain --config-path ./config.toml
 agentctl config template --backend openrc --output ./config.toml
 ```
 

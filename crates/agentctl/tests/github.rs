@@ -82,6 +82,10 @@ fn agentctl_symlink_style_help_does_not_duplicate_subcommand_name() {
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(
+    target_os = "macos",
+    ignore = "macOS sandbox blocks test UDS listener bind"
+)]
 fn agentctl_runs_command_with_installation_token_environment() {
     let (socket_dir, socket_path, server) =
         agentd_token_response_server("test-token", "https://api.github.com");
@@ -118,6 +122,10 @@ fn agentctl_runs_command_with_installation_token_environment() {
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(
+    target_os = "macos",
+    ignore = "macOS sandbox blocks test UDS listener bind"
+)]
 fn agentctl_can_configure_child_only_git_credentials() {
     let api_url = "http://127.0.0.1:1";
     let (socket_dir, socket_path, server) = agentd_token_response_server("test-token", api_url);
@@ -173,6 +181,10 @@ fn agentctl_can_configure_child_only_git_credentials() {
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(
+    target_os = "macos",
+    ignore = "macOS sandbox blocks test UDS listener bind"
+)]
 fn agentctl_exits_with_child_exit_code() {
     let (socket_dir, socket_path, server) =
         agentd_token_response_server("test-token", "https://api.github.com");
@@ -199,6 +211,10 @@ fn agentctl_exits_with_child_exit_code() {
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(
+    target_os = "macos",
+    ignore = "macOS sandbox blocks test UDS listener bind"
+)]
 fn agentctl_uses_named_config_profile() {
     let (socket_dir, socket_path, server) =
         agentd_token_response_server("test-token", "https://api.github.com");
@@ -232,6 +248,10 @@ fn agentctl_uses_named_config_profile() {
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(
+    target_os = "macos",
+    ignore = "macOS sandbox blocks test UDS listener bind"
+)]
 fn agentctl_reports_agentd_error() {
     let (socket_dir, socket_path, server) = agentd_error_response_server("repo is not allowed");
     let mut cmd = Command::cargo_bin("agentctl").expect("binary exists");
@@ -258,6 +278,10 @@ fn agentctl_reports_agentd_error() {
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(
+    target_os = "macos",
+    ignore = "macOS sandbox blocks test UDS listener bind"
+)]
 fn agentctl_exits_with_child_signal_status() {
     let (socket_dir, socket_path, server) =
         agentd_token_response_server("test-token", "https://api.github.com");
@@ -293,6 +317,10 @@ fn agentctl_requires_command_after_separator() {
 }
 
 #[test]
+#[cfg_attr(
+    target_os = "macos",
+    ignore = "macOS sandbox blocks test UDS listener bind"
+)]
 fn agentctl_accepts_command_options_after_separator() {
     #[cfg(unix)]
     {

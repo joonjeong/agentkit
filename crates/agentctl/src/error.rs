@@ -4,12 +4,6 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("agentctl must be executed via sudo")]
-    MissingSudoUser,
-
-    #[error("direct root execution is not allowed")]
-    DirectRootExecution,
-
     #[error("caller not allowed: {0}")]
     CallerNotAllowed(String),
 

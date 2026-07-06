@@ -7,6 +7,7 @@ use reqwest::Url;
 use serde::Deserialize;
 
 use crate::notification::{DiscordProfile, TelegramProfile};
+use crate::service::ServiceConfigFile;
 
 #[derive(Debug, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
@@ -14,6 +15,7 @@ pub(crate) struct AgentdConfigFile {
     pub(crate) github_app: Option<GithubConfigFile>,
     pub(crate) telegram: Option<TelegramConfigFile>,
     pub(crate) discord: Option<DiscordConfigFile>,
+    pub(crate) service: Option<ServiceConfigFile>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -59,7 +61,11 @@ pub(crate) fn load(path: &Path) -> Result<AgentdConfigFile> {
 }
 
 pub(crate) fn validate(config: &AgentdConfigFile, path: &Path) -> Result<()> {
-    if config.github_app.is_none() && config.telegram.is_none() && config.discord.is_none() {
+    if config.github_app.is_none()
+        && config.telegram.is_none()
+        && config.discord.is_none()
+        && config.service.is_none()
+    {
         return Err(anyhow!("missing provider section in {}", path.display()));
     };
     if let Some(github_app) = &config.github_app {
@@ -70,6 +76,9 @@ pub(crate) fn validate(config: &AgentdConfigFile, path: &Path) -> Result<()> {
     }
     if let Some(discord) = &config.discord {
         validate_discord(discord, path)?;
+    }
+    if let Some(service) = &config.service {
+        crate::service::validate_service_config(service, path)?;
     }
     Ok(())
 }

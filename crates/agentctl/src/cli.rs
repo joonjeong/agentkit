@@ -10,8 +10,8 @@ use crate::config::{configured_config_path, Backend, Config};
 use crate::error::{Error, Result};
 use crate::github;
 use crate::notification::{self, Notification, Severity};
-use crate::policy::{is_allowed, validate_target, Action};
-use crate::runner;
+use crate::policy::{validate_target, Action};
+use crate::service;
 
 const VERSION: &str = match option_env!("AGENTKIT_VERSION") {
     Some(version) => version,
@@ -31,7 +31,7 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// Bootstrap local installation, config, sudoers, logrotate, and group access.
+    /// Bootstrap local installation, config, logrotate, and group access.
     Bootstrap(BootstrapArgs),
     /// Manage allowlisted services.
     Service(ServiceCommand),
@@ -50,6 +50,15 @@ enum Command {
 
 #[derive(Debug, Args)]
 struct ServiceCommand {
+    /// agentd Unix domain socket path.
+    #[arg(
+        long,
+        global = true,
+        env = "AGENTCTL_AGENTD_SOCKET",
+        default_value = DEFAULT_AGENTD_SOCKET_PATH
+    )]
+    agentd_socket: PathBuf,
+
     #[command(subcommand)]
     command: ServiceSubcommand,
 }
@@ -217,23 +226,26 @@ where
         Command::Bootstrap(args) => bootstrap::run(args),
         Command::Service(command) => match command.command {
             ServiceSubcommand::Start(args) => {
-                execute(Action::ServiceStart, &args.service, None, &config_path)
+                execute_service("start", &args.service, None, &command.agentd_socket)
             }
             ServiceSubcommand::Stop(args) => {
-                execute(Action::ServiceStop, &args.service, None, &config_path)
+                execute_service("stop", &args.service, None, &command.agentd_socket)
             }
             ServiceSubcommand::Restart(args) => {
-                execute(Action::ServiceRestart, &args.service, None, &config_path)
+                execute_service("restart", &args.service, None, &command.agentd_socket)
             }
             ServiceSubcommand::Reload(args) => {
-                execute(Action::ServiceReload, &args.service, None, &config_path)
+                execute_service("reload", &args.service, None, &command.agentd_socket)
             }
             ServiceSubcommand::Status(args) => {
-                execute(Action::ServiceStatus, &args.service, None, &config_path)
+                execute_service("status", &args.service, None, &command.agentd_socket)
             }
-            ServiceSubcommand::Logs(args) => {
-                execute(Action::Logs, &args.service, Some(args.lines), &config_path)
-            }
+            ServiceSubcommand::Logs(args) => execute_service(
+                "logs",
+                &args.service,
+                Some(args.lines),
+                &command.agentd_socket,
+            ),
         },
         Command::GithubApp(args) => {
             github::github_app(args)
@@ -268,14 +280,10 @@ fn load_valid_config(config_path: &Path) -> Result<Config> {
     Ok(config)
 }
 
-fn caller_from_sudo() -> Result<String> {
-    let caller = std::env::var("SUDO_USER").map_err(|_| Error::MissingSudoUser)?;
-    if caller.is_empty() {
-        return Err(Error::MissingSudoUser);
-    }
-    if caller == "root" {
-        return Err(Error::DirectRootExecution);
-    }
+fn caller_from_environment() -> Result<String> {
+    let caller = std::env::var("USER")
+        .or_else(|_| std::env::var("LOGNAME"))
+        .unwrap_or_else(|_| format!("uid-{}", unsafe { libc::getuid() }));
     crate::policy::validate_caller(&caller)?;
     Ok(caller)
 }
@@ -404,7 +412,7 @@ fn notify_via_agentd(
     }
     notification::validate_message_text(title, message)?;
 
-    let caller = caller_from_sudo()?;
+    let caller = caller_from_environment()?;
     let target = format!("{provider}:{profile}");
     let audit_path = audit::configured_audit_log_path();
     audit::write(
@@ -437,94 +445,12 @@ fn notify_via_agentd(
     Ok(0)
 }
 
-fn execute(
-    action: Action,
+fn execute_service(
+    action: &str,
     target: &str,
     requested_lines: Option<u32>,
-    config_path: &Path,
+    agentd_socket: &Path,
 ) -> Result<i32> {
     validate_target(target)?;
-    let caller = caller_from_sudo()?;
-    let config = load_valid_config(config_path)?;
-
-    let audit_path = audit::configured_audit_log_path();
-    let Some(caller_policy) = config.callers.get(&caller) else {
-        audit::write(
-            &audit_path,
-            &caller,
-            action.as_str(),
-            target,
-            "deny",
-            Some("caller_not_allowed"),
-        )?;
-        return Err(Error::CallerNotAllowed(caller));
-    };
-
-    if !is_allowed(caller_policy, action, target) {
-        audit::write(
-            &audit_path,
-            &caller,
-            action.as_str(),
-            target,
-            "deny",
-            Some("target_not_allowed"),
-        )?;
-        return Err(Error::TargetNotAllowed(target.to_owned()));
-    }
-
-    let lines = requested_lines.unwrap_or(DEFAULT_LOG_LINES);
-    if action == Action::Logs && (lines == 0 || lines > config.max_log_lines()) {
-        audit::write(
-            &audit_path,
-            &caller,
-            action.as_str(),
-            target,
-            "deny",
-            Some("invalid_line_count"),
-        )?;
-        return Err(Error::InvalidLineCount(lines));
-    }
-
-    if action == Action::Logs && config.backend() == crate::config::Backend::Openrc {
-        audit::write(
-            &audit_path,
-            &caller,
-            action.as_str(),
-            target,
-            "deny",
-            Some("unsupported_backend_action"),
-        )?;
-        return Err(Error::UnsupportedBackendAction {
-            backend: config.backend().as_str(),
-            action: action.as_str(),
-        });
-    }
-
-    audit::write(&audit_path, &caller, action.as_str(), target, "allow", None)?;
-
-    let exit_code = match action {
-        Action::ServiceStart => runner::service(config.backend(), "start", target),
-        Action::ServiceStop => runner::service(config.backend(), "stop", target),
-        Action::ServiceRestart => runner::service(config.backend(), "restart", target),
-        Action::ServiceReload => runner::service(config.backend(), "reload", target),
-        Action::ServiceStatus => runner::service(config.backend(), "status", target),
-        Action::Logs => runner::logs(config.backend(), target, lines),
-        Action::Notify => {
-            return Err(Error::InvalidConfigOption(
-                "notifications must use provider notify command".to_owned(),
-            ))
-        }
-    }?;
-
-    let outcome = format!("exit_code={exit_code}");
-    audit::write(
-        &audit_path,
-        &caller,
-        action.as_str(),
-        target,
-        "executed",
-        Some(&outcome),
-    )?;
-
-    Ok(exit_code)
+    service::execute_via_agentd(agentd_socket, action, target, requested_lines)
 }

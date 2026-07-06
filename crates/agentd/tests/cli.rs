@@ -54,6 +54,7 @@ fn bootstrap_installs_binary_and_writes_default_config() {
     assert!(config_contents.contains("[github_app]"));
     assert!(config_contents.contains("[telegram.profiles.myriad.token]"));
     assert!(config_contents.contains("[discord.profiles.myriad.webhook]"));
+    assert!(config_contents.contains("[service.callers.hermes]"));
     let service_contents = fs::read_to_string(service).expect("service written");
     assert!(service_contents.contains("[Service]"));
     assert!(service_contents.contains(&format!(
@@ -157,6 +158,10 @@ fn config_check_rejects_profile_without_allowed_repos() {
 }
 
 #[test]
+#[cfg_attr(
+    target_os = "macos",
+    ignore = "macOS sandbox blocks test socket listener bind"
+)]
 fn serve_once_mints_github_app_token_over_uds() {
     let (api_url, github_server) = github_token_response_server();
     let config_dir = unique_temp_dir("agentd-serve-test");
@@ -206,6 +211,10 @@ fn serve_once_mints_github_app_token_over_uds() {
 }
 
 #[test]
+#[cfg_attr(
+    target_os = "macos",
+    ignore = "macOS sandbox blocks test socket listener bind"
+)]
 fn serve_once_rejects_repo_outside_profile_scope() {
     let config_dir = unique_temp_dir("agentd-serve-test");
     fs::create_dir(&config_dir).expect("config dir created");
@@ -247,6 +256,10 @@ fn serve_once_rejects_repo_outside_profile_scope() {
 }
 
 #[test]
+#[cfg_attr(
+    target_os = "macos",
+    ignore = "macOS sandbox blocks test socket listener bind"
+)]
 fn serve_once_sends_telegram_notification_over_uds() {
     let config_dir = unique_temp_dir("agentd-notify-test");
     fs::create_dir(&config_dir).expect("config dir created");
@@ -298,6 +311,10 @@ fn serve_once_sends_telegram_notification_over_uds() {
 }
 
 #[test]
+#[cfg_attr(
+    target_os = "macos",
+    ignore = "macOS sandbox blocks test socket listener bind"
+)]
 fn serve_once_sends_discord_notification_over_uds() {
     let config_dir = unique_temp_dir("agentd-notify-test");
     fs::create_dir(&config_dir).expect("config dir created");
@@ -348,6 +365,60 @@ fn serve_once_sends_discord_notification_over_uds() {
     fs::remove_dir_all(config_dir).expect("config dir removed");
 }
 
+#[test]
+#[cfg_attr(
+    target_os = "macos",
+    ignore = "macOS sandbox blocks test socket listener bind"
+)]
+fn serve_once_runs_service_command_for_peer_uid() {
+    let config_dir = unique_temp_dir("agentd-service-test");
+    fs::create_dir(&config_dir).expect("config dir created");
+    let config_path = write_config(&config_dir, "https://api.github.com");
+    let socket_path = config_dir.join("agentd.sock");
+    let recorder = write_recorder(&config_dir, "systemctl-recorder");
+    let record = config_dir.join("systemctl.args");
+
+    let mut agentd = std::process::Command::new(assert_cmd::cargo::cargo_bin("agentd"))
+        .args([
+            "serve",
+            "--once",
+            "--config-path",
+            config_path.to_str().expect("utf-8 config path"),
+            "--socket-path",
+            socket_path.to_str().expect("utf-8 socket path"),
+        ])
+        .env("AGENTD_TEST_OVERRIDES", "1")
+        .env("AGENTD_SYSTEMCTL_PATH", &recorder)
+        .env("AGENTD_RECORD_PATH", &record)
+        .spawn()
+        .expect("agentd starts");
+
+    wait_for_socket(&socket_path);
+    let mut stream = UnixStream::connect(&socket_path).expect("client connects");
+    stream
+        .write_all(
+            br#"{"version":1,"type":"service","action":"restart","service":"hermes","lines":null}"#,
+        )
+        .expect("request writes");
+    stream.write_all(b"\n").expect("request newline writes");
+
+    let mut response = String::new();
+    BufReader::new(stream)
+        .read_line(&mut response)
+        .expect("response reads");
+
+    let status = agentd.wait().expect("agentd exits");
+    assert!(status.success());
+    assert!(response.contains(r#""status":"ok""#));
+    assert!(response.contains(r#""exit_code":0"#));
+    assert_eq!(
+        fs::read_to_string(record).expect("recorded args"),
+        "--no-pager\nrestart\nhermes.service\n"
+    );
+
+    fs::remove_dir_all(config_dir).expect("config dir removed");
+}
+
 fn github_token_response_server() -> (String, thread::JoinHandle<String>) {
     let listener = TcpListener::bind("127.0.0.1:0").expect("test server binds");
     let address = listener.local_addr().expect("test server address");
@@ -380,10 +451,11 @@ fn write_config(config_dir: &std::path::Path, api_url: &str) -> std::path::PathB
     fs::write(&discord_webhook_path, "https://discord.test/webhook")
         .expect("discord webhook written");
     let config_path = config_dir.join("config.toml");
+    let uid = unsafe { libc::getuid() };
     fs::write(
         &config_path,
         format!(
-            "[github_app]\napi_url = \"{api_url}\"\ndefault_profile = \"default\"\n\n[github_app.profiles.default]\napp_id = 1\ninstallation_id = 42\nrepos = [\"OWNER/REPO\"]\n\n[github_app.profiles.default.private_key]\ntype = \"file\"\npath = \"{}\"\n\n[github_app.profiles.default.permissions]\ncontents = \"read\"\n\n[telegram.profiles.myriad.token]\ntype = \"file\"\npath = \"{}\"\n\n[discord.profiles.myriad.webhook]\ntype = \"file\"\npath = \"{}\"\n",
+            "[github_app]\napi_url = \"{api_url}\"\ndefault_profile = \"default\"\n\n[github_app.profiles.default]\napp_id = 1\ninstallation_id = 42\nrepos = [\"OWNER/REPO\"]\n\n[github_app.profiles.default.private_key]\ntype = \"file\"\npath = \"{}\"\n\n[github_app.profiles.default.permissions]\ncontents = \"read\"\n\n[telegram.profiles.myriad.token]\ntype = \"file\"\npath = \"{}\"\n\n[discord.profiles.myriad.webhook]\ntype = \"file\"\npath = \"{}\"\n\n[service]\nbackend = \"systemd\"\nmax_log_lines = 1000\n\n[service.callers.hermes]\nuids = [{uid}]\nservice_control = [\"hermes\"]\nservice_read = [\"hermes\"]\n",
             private_key_path.to_string_lossy(),
             telegram_token_path.to_string_lossy(),
             discord_webhook_path.to_string_lossy()
@@ -401,6 +473,22 @@ fn wait_for_socket(socket_path: &std::path::Path) {
         std::thread::sleep(std::time::Duration::from_millis(10));
     }
     panic!("agentd socket was not created");
+}
+
+fn write_recorder(dir: &std::path::Path, name: &str) -> std::path::PathBuf {
+    let path = dir.join(name);
+    let script = "#!/bin/sh\n: > \"$AGENTD_RECORD_PATH\"\nfor arg in \"$@\"; do printf '%s\\n' \"$arg\" >> \"$AGENTD_RECORD_PATH\"; done\n";
+    fs::write(&path, script).expect("recorder written");
+    let mut permissions = fs::metadata(&path)
+        .expect("recorder metadata")
+        .permissions();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        permissions.set_mode(0o755);
+    }
+    fs::set_permissions(&path, permissions).expect("recorder executable");
+    path
 }
 
 fn unique_temp_dir(prefix: &str) -> std::path::PathBuf {
