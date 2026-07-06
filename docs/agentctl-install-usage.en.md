@@ -172,6 +172,9 @@ agentctl config template --backend openrc --output ./config.toml
 agentctl config template --backend openrc --output ./config.toml --force
 ```
 
+The generated config is rendered from
+`crates/agentctl/resources/templates/config.agentctl.toml.template`.
+
 `config template` is an administrator convenience command and is not included in
 the generated sudoers rule.
 

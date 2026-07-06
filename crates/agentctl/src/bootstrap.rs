@@ -15,6 +15,7 @@ const DEFAULT_GROUP: &str = "agent";
 const DEFAULT_LOGROTATE_PATH: &str = "/etc/logrotate.d/agentctl";
 const DEFAULT_SUDOERS_PATH: &str = "/etc/sudoers.d/agent";
 const DEFAULT_SUDO_LOG_PATH: &str = "/var/log/agentctl/sudo.log";
+const CONFIG_TEMPLATE: &str = include_str!("../resources/templates/config.agentctl.toml.template");
 const LOGROTATE_TEMPLATE: &str = include_str!("../resources/templates/logrotate.agentctl.template");
 const SUDOERS_TEMPLATE: &str = include_str!("../resources/templates/sudoers.agent.template");
 
@@ -367,9 +368,19 @@ fn logrotate_contents(audit_log_path: &Path, sudo_log_path: &Path) -> String {
         .replace("{sudo_log}", &sudo_log_path.display().to_string())
 }
 
-pub(crate) fn sample_config(backend: Backend) -> &'static str {
-    match backend {
-        Backend::Systemd => include_str!("../resources/examples/config/systemd.example.toml"),
-        Backend::Openrc => include_str!("../resources/examples/config/openrc.example.toml"),
-    }
+pub(crate) fn sample_config(backend: Backend) -> String {
+    let (backend_name, backend_note, service_read_note) = match backend {
+        Backend::Systemd => ("systemd", "", ""),
+        Backend::Openrc => (
+            "OpenRC",
+            " The OpenRC backend supports service control and status;\n# logs return an explicit unsupported-backend error.",
+            " Logs are currently unsupported on OpenRC.",
+        ),
+    };
+
+    CONFIG_TEMPLATE
+        .replace("{backend_name}", backend_name)
+        .replace("{backend}", backend.as_str())
+        .replace("{backend_note}", backend_note)
+        .replace("{service_read_note}", service_read_note)
 }

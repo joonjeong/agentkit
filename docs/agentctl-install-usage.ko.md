@@ -172,6 +172,10 @@ agentctl config template --backend openrc --output ./config.toml
 agentctl config template --backend openrc --output ./config.toml --force
 ```
 
+생성되는 config는
+`crates/agentctl/resources/templates/config.agentctl.toml.template`에서
+렌더링됩니다.
+
 `config template`은 관리자 편의 명령이며, 생성되는 sudoers 규칙에는
 포함되지 않습니다.
 

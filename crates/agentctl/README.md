@@ -46,6 +46,8 @@ sudo ./agentctl bootstrap --user hermes
 `config template` prints an example config by default and can write one with
 `--output`; it is intended for administrators and is not included in the
 generated sudoers rule.
+The config text is rendered from
+`crates/agentctl/resources/templates/config.agentctl.toml.template`.
 
 `bootstrap` installs the current executable to `/usr/local/sbin/agentctl`,
 creates the `agent` group, adds existing `--user` accounts to the group,

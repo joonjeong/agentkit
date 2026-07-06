@@ -13,7 +13,7 @@ static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 #[test]
 fn config_check_accepts_sample_config() {
     let temp = temp_dir("agentctl-config-check");
-    let config = write_config(&temp, SAMPLE_CONFIG);
+    let config = write_config(&temp, &sample_config("systemd"));
 
     Command::cargo_bin("agentctl")
         .expect("binary exists")
@@ -32,7 +32,7 @@ fn config_check_accepts_sample_config() {
 #[test]
 fn config_check_accepts_explicit_config_path() {
     let temp = temp_dir("agentctl-config-check-path");
-    let config = write_config(&temp, SAMPLE_CONFIG);
+    let config = write_config(&temp, &sample_config("systemd"));
     let invalid_config = temp.join("invalid-config.toml");
     fs::write(&invalid_config, "not toml").expect("invalid config written");
 
@@ -57,7 +57,7 @@ fn config_check_accepts_explicit_config_path() {
 #[test]
 fn config_explain_dumps_validated_config() {
     let temp = temp_dir("agentctl-explain");
-    let config = write_config(&temp, SAMPLE_CONFIG);
+    let config = write_config(&temp, &sample_config("systemd"));
 
     Command::cargo_bin("agentctl")
         .expect("binary exists")
@@ -155,7 +155,7 @@ fn config_template_writes_output_without_overwriting_by_default() {
 #[test]
 fn service_status_runs_fixed_systemctl_without_shell() {
     let temp = temp_dir("agentctl-status");
-    let config = write_config(&temp, SAMPLE_CONFIG);
+    let config = write_config(&temp, &sample_config("systemd"));
     let audit = temp.join("audit.log");
     let recorder = write_recorder(&temp, "systemctl-recorder");
     let record = temp.join("systemctl.args");
@@ -188,7 +188,7 @@ fn service_status_runs_fixed_systemctl_without_shell() {
 #[test]
 fn service_start_runs_fixed_systemctl_without_shell() {
     let temp = temp_dir("agentctl-start");
-    let config = write_config(&temp, SAMPLE_CONFIG);
+    let config = write_config(&temp, &sample_config("systemd"));
     let audit = temp.join("audit.log");
     let recorder = write_recorder(&temp, "systemctl-recorder");
     let record = temp.join("systemctl.args");
@@ -216,7 +216,7 @@ fn service_start_runs_fixed_systemctl_without_shell() {
 #[test]
 fn service_stop_runs_fixed_systemctl_without_shell() {
     let temp = temp_dir("agentctl-stop");
-    let config = write_config(&temp, SAMPLE_CONFIG);
+    let config = write_config(&temp, &sample_config("systemd"));
     let audit = temp.join("audit.log");
     let recorder = write_recorder(&temp, "systemctl-recorder");
     let record = temp.join("systemctl.args");
@@ -396,7 +396,7 @@ fn notify_reports_agentd_rejection() {
 #[test]
 fn openrc_service_status_runs_rc_service_without_shell() {
     let temp = temp_dir("agentctl-openrc-status");
-    let config = write_config(&temp, OPENRC_CONFIG);
+    let config = write_config(&temp, &sample_config("openrc"));
     let audit = temp.join("audit.log");
     let recorder = write_recorder(&temp, "rc-service-recorder");
     let record = temp.join("rc-service.args");
@@ -426,7 +426,7 @@ fn openrc_service_status_runs_rc_service_without_shell() {
 #[test]
 fn openrc_service_start_runs_rc_service_without_shell() {
     let temp = temp_dir("agentctl-openrc-start");
-    let config = write_config(&temp, OPENRC_CONFIG);
+    let config = write_config(&temp, &sample_config("openrc"));
     let audit = temp.join("audit.log");
     let recorder = write_recorder(&temp, "rc-service-recorder");
     let record = temp.join("rc-service.args");
@@ -454,7 +454,7 @@ fn openrc_service_start_runs_rc_service_without_shell() {
 #[test]
 fn openrc_logs_are_explicitly_unsupported() {
     let temp = temp_dir("agentctl-openrc-logs");
-    let config = write_config(&temp, OPENRC_CONFIG);
+    let config = write_config(&temp, &sample_config("openrc"));
     let audit = temp.join("audit.log");
 
     Command::cargo_bin("agentctl")
@@ -507,7 +507,7 @@ service_restarts = ["nginx"]
 #[test]
 fn denied_target_is_audited_and_not_executed() {
     let temp = temp_dir("agentctl-denied");
-    let config = write_config(&temp, SAMPLE_CONFIG);
+    let config = write_config(&temp, &sample_config("systemd"));
     let audit = temp.join("audit.log");
     let recorder = write_recorder(&temp, "systemctl-recorder");
     let record = temp.join("systemctl.args");
@@ -537,7 +537,7 @@ fn denied_target_is_audited_and_not_executed() {
 #[test]
 fn logs_rejects_line_count_above_config_maximum() {
     let temp = temp_dir("agentctl-lines");
-    let config = write_config(&temp, SAMPLE_CONFIG);
+    let config = write_config(&temp, &sample_config("systemd"));
     let audit = temp.join("audit.log");
 
     Command::cargo_bin("agentctl")
@@ -560,7 +560,7 @@ fn logs_rejects_line_count_above_config_maximum() {
 #[test]
 fn direct_root_execution_is_rejected() {
     let temp = temp_dir("agentctl-root");
-    let config = write_config(&temp, SAMPLE_CONFIG);
+    let config = write_config(&temp, &sample_config("systemd"));
 
     Command::cargo_bin("agentctl")
         .expect("binary exists")
@@ -793,8 +793,25 @@ fn write_recorder(dir: &Path, name: &str) -> PathBuf {
     path
 }
 
-const SAMPLE_CONFIG: &str = include_str!("../resources/examples/config/systemd.example.toml");
-const OPENRC_CONFIG: &str = include_str!("../resources/examples/config/openrc.example.toml");
+const CONFIG_TEMPLATE: &str = include_str!("../resources/templates/config.agentctl.toml.template");
+
+fn sample_config(backend: &str) -> String {
+    let (backend_name, backend_note, service_read_note) = match backend {
+        "systemd" => ("systemd", "", ""),
+        "openrc" => (
+            "OpenRC",
+            " The OpenRC backend supports service control and status;\n# logs return an explicit unsupported-backend error.",
+            " Logs are currently unsupported on OpenRC.",
+        ),
+        other => panic!("unknown backend: {other}"),
+    };
+
+    CONFIG_TEMPLATE
+        .replace("{backend_name}", backend_name)
+        .replace("{backend}", backend)
+        .replace("{backend_note}", backend_note)
+        .replace("{service_read_note}", service_read_note)
+}
 const TELEGRAM_NOTIFY_CONFIG: &str = r#"
 version = 1
 
