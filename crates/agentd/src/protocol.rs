@@ -21,7 +21,9 @@ pub(crate) enum WireRequest {
     Notify {
         version: u32,
         caller: String,
-        channel: String,
+        provider: String,
+        profile: String,
+        chat_id: Option<String>,
         severity: Severity,
         title: Option<String>,
         message: String,

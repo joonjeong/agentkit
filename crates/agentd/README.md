@@ -28,15 +28,10 @@ path = "/etc/agentd/secrets/codex-review-github-app.private-key.pem"
 contents = "read"
 pull_requests = "read"
 
-[notification.channels.telegram_myriad]
-type = "telegram"
-allowed_callers = ["hermes"]
-chat_id = "123456789"
+[telegram.profiles.myriad]
 bot_token_file = "/etc/agentd/secrets/telegram-bot-token"
 
-[notification.channels.discord_myriad]
-type = "discord"
-allowed_callers = ["hermes"]
+[discord.profiles.myriad]
 webhook_url_file = "/etc/agentd/secrets/discord-webhook-url"
 ```
 
@@ -85,7 +80,7 @@ instead of letting clients widen their own scope.
 Notification request:
 
 ```json
-{"version":1,"type":"notify","caller":"hermes","channel":"telegram_myriad","severity":"critical","title":"disk full","message":"/var is 95%"}
+{"version":1,"type":"notify","caller":"hermes","provider":"telegram","profile":"myriad","chat_id":"123456789","severity":"critical","title":"disk full","message":"/var is 95%"}
 ```
 
 Successful notification response:
@@ -94,7 +89,8 @@ Successful notification response:
 {"status":"ok","version":1}
 ```
 
-Notification channels live under `[notification.channels.<name>]` in the agentd
-config. Each channel requires `allowed_callers`. Telegram channels require
-`chat_id` plus either `bot_token_file` or `bot_token_env`. Discord channels
-require either `webhook_url_file` or `webhook_url_env`.
+Notification profiles live under `[telegram.profiles.<name>]` and
+`[discord.profiles.<name>]` in the agentd config. Telegram profiles require
+either `bot_token_file` or `bot_token_env`; `chat_id` is supplied per notify
+request. Discord profiles require either `webhook_url_file` or
+`webhook_url_env`.

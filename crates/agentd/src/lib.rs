@@ -105,8 +105,11 @@ fn config(args: ConfigArgs) -> Result<()> {
                     println!("default_profile: {default_profile}");
                 }
             }
-            if let Some(notification) = config.notification {
-                println!("notification channels: {}", notification.channels.len());
+            if let Some(telegram) = config.telegram {
+                println!("telegram profiles: {}", telegram.profiles.len());
+            }
+            if let Some(discord) = config.discord {
+                println!("discord profiles: {}", discord.profiles.len());
             }
             Ok(())
         }

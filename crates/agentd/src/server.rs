@@ -85,35 +85,53 @@ fn handle_request(request: WireRequest, config: &AgentdConfigFile) -> Result<Wir
         WireRequest::Notify {
             version,
             caller,
-            channel,
+            provider,
+            profile,
+            chat_id,
             severity,
             title,
             message,
         } => {
             WireRequest::validate_version(version)?;
-            let notification_config = config
-                .notification
-                .as_ref()
-                .ok_or_else(|| anyhow::anyhow!("notification is not configured"))?;
-            let configured_channel = notification_config
-                .channels
-                .get(&channel)
-                .ok_or_else(|| anyhow::anyhow!("notification channel not found: {channel}"))?;
-            if !notification::caller_is_allowed(configured_channel, &caller) {
-                return Err(anyhow::anyhow!(
-                    "caller {caller:?} is not allowed to use notification channel {channel:?}"
-                ));
+            let notification = Notification {
+                caller: &caller,
+                profile: &profile,
+                severity,
+                title: title.as_deref(),
+                message: &message,
+            };
+            match provider.as_str() {
+                "telegram" => {
+                    let telegram = config
+                        .telegram
+                        .as_ref()
+                        .ok_or_else(|| anyhow::anyhow!("telegram is not configured"))?;
+                    let configured_profile = telegram
+                        .profiles
+                        .get(&profile)
+                        .ok_or_else(|| anyhow::anyhow!("telegram profile not found: {profile}"))?;
+                    let chat_id = chat_id
+                        .as_deref()
+                        .ok_or_else(|| anyhow::anyhow!("telegram chat_id is required"))?;
+                    notification::send_telegram(configured_profile, chat_id, &notification)?;
+                }
+                "discord" => {
+                    let discord = config
+                        .discord
+                        .as_ref()
+                        .ok_or_else(|| anyhow::anyhow!("discord is not configured"))?;
+                    let configured_profile = discord
+                        .profiles
+                        .get(&profile)
+                        .ok_or_else(|| anyhow::anyhow!("discord profile not found: {profile}"))?;
+                    notification::send_discord(configured_profile, &notification)?;
+                }
+                _ => {
+                    return Err(anyhow::anyhow!(
+                        "unsupported notification provider: {provider}"
+                    ))
+                }
             }
-            notification::send(
-                configured_channel,
-                &Notification {
-                    caller: &caller,
-                    channel: &channel,
-                    severity,
-                    title: title.as_deref(),
-                    message: &message,
-                },
-            )?;
             Ok(WireResponse::ok())
         }
     }

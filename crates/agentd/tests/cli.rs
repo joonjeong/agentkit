@@ -173,7 +173,7 @@ fn serve_once_sends_telegram_notification_over_uds() {
     let mut stream = UnixStream::connect(&socket_path).expect("client connects");
     stream
         .write_all(
-            br#"{"version":1,"type":"notify","caller":"hermes","channel":"telegram_myriad","severity":"critical","title":"disk full","message":"/var is 95%"}"#,
+            br#"{"version":1,"type":"notify","caller":"hermes","provider":"telegram","profile":"myriad","chat_id":"123456789","severity":"critical","title":"disk full","message":"/var is 95%"}"#,
         )
         .expect("request writes");
     stream.write_all(b"\n").expect("request newline writes");
@@ -189,7 +189,7 @@ fn serve_once_sends_telegram_notification_over_uds() {
     assert!(response.contains(r#""version":1"#));
 
     let request = fs::read_to_string(&record_path).expect("notification recorded");
-    assert!(request.contains("channel=telegram_myriad"));
+    assert!(request.contains("channel=myriad"));
     assert!(request.contains("url=https://telegram.test/bottelegram-token/sendMessage"));
     assert!(request.contains(r#""chat_id":"123456789""#));
     assert!(request.contains(r#""text":"[critical] disk full\ncaller: hermes\n/var is 95%""#));
@@ -227,7 +227,7 @@ fn serve_once_sends_discord_notification_over_uds() {
     let mut stream = UnixStream::connect(&socket_path).expect("client connects");
     stream
         .write_all(
-            br#"{"version":1,"type":"notify","caller":"hermes","channel":"discord_myriad","severity":"warning","title":null,"message":"service degraded"}"#,
+            br#"{"version":1,"type":"notify","caller":"hermes","provider":"discord","profile":"myriad","severity":"warning","title":null,"message":"service degraded"}"#,
         )
         .expect("request writes");
     stream.write_all(b"\n").expect("request newline writes");
@@ -243,7 +243,7 @@ fn serve_once_sends_discord_notification_over_uds() {
     assert!(response.contains(r#""version":1"#));
 
     let request = fs::read_to_string(&record_path).expect("notification recorded");
-    assert!(request.contains("channel=discord_myriad"));
+    assert!(request.contains("channel=myriad"));
     assert!(request.contains("url=https://discord.test/webhook"));
     assert!(request
         .contains(r#""content":"[warning] agentctl notify\ncaller: hermes\nservice degraded""#));
@@ -281,7 +281,7 @@ fn write_config(config_dir: &std::path::Path, api_url: &str) -> std::path::PathB
     fs::write(
         &config_path,
         format!(
-            "[github_app]\napi_url = \"{api_url}\"\ndefault_profile = \"default\"\n\n[github_app.profiles.default]\napp_id = 1\ninstallation_id = 42\nrepos = [\"OWNER/REPO\"]\n\n[github_app.profiles.default.private_key]\ntype = \"file\"\npath = \"{}\"\n\n[github_app.profiles.default.permissions]\ncontents = \"read\"\n\n[notification.channels.telegram_myriad]\ntype = \"telegram\"\nallowed_callers = [\"hermes\"]\nchat_id = \"123456789\"\nbot_token_env = \"AGENTD_TEST_TELEGRAM_TOKEN\"\n\n[notification.channels.discord_myriad]\ntype = \"discord\"\nallowed_callers = [\"hermes\"]\nwebhook_url_env = \"AGENTD_TEST_DISCORD_WEBHOOK\"\n",
+            "[github_app]\napi_url = \"{api_url}\"\ndefault_profile = \"default\"\n\n[github_app.profiles.default]\napp_id = 1\ninstallation_id = 42\nrepos = [\"OWNER/REPO\"]\n\n[github_app.profiles.default.private_key]\ntype = \"file\"\npath = \"{}\"\n\n[github_app.profiles.default.permissions]\ncontents = \"read\"\n\n[telegram.profiles.myriad]\nbot_token_env = \"AGENTD_TEST_TELEGRAM_TOKEN\"\n\n[discord.profiles.myriad]\nwebhook_url_env = \"AGENTD_TEST_DISCORD_WEBHOOK\"\n",
             private_key_path.to_string_lossy()
         ),
     )

@@ -19,7 +19,9 @@ pub enum Severity {
 
 pub struct Notification<'a> {
     pub caller: &'a str,
-    pub channel: &'a str,
+    pub provider: &'a str,
+    pub profile: &'a str,
+    pub chat_id: Option<&'a str>,
     pub severity: Severity,
     pub title: Option<&'a str>,
     pub message: &'a str,
@@ -31,7 +33,9 @@ struct AgentdNotifyRequest<'a> {
     #[serde(rename = "type")]
     request_type: &'static str,
     caller: &'a str,
-    channel: &'a str,
+    provider: &'a str,
+    profile: &'a str,
+    chat_id: Option<&'a str>,
     severity: Severity,
     title: Option<&'a str>,
     message: &'a str,
@@ -76,7 +80,9 @@ pub fn send_via_agentd(socket_path: &Path, notification: &Notification<'_>) -> R
         version: AGENTD_WIRE_PROTOCOL_VERSION,
         request_type: "notify",
         caller: notification.caller,
-        channel: notification.channel,
+        provider: notification.provider,
+        profile: notification.profile,
+        chat_id: notification.chat_id,
         severity: notification.severity,
         title: notification.title,
         message: notification.message,

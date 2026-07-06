@@ -30,86 +30,41 @@ impl Severity {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(tag = "type", rename_all = "lowercase", deny_unknown_fields)]
-pub(crate) enum NotificationChannel {
-    Telegram(TelegramChannel),
-    Discord(DiscordChannel),
-}
-
-#[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct TelegramChannel {
-    #[serde(default)]
-    pub(crate) allowed_callers: Vec<String>,
-    pub(crate) chat_id: String,
+pub(crate) struct TelegramProfile {
     pub(crate) bot_token_env: Option<String>,
     pub(crate) bot_token_file: Option<PathBuf>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct DiscordChannel {
-    #[serde(default)]
-    pub(crate) allowed_callers: Vec<String>,
+pub(crate) struct DiscordProfile {
     pub(crate) webhook_url_env: Option<String>,
     pub(crate) webhook_url_file: Option<PathBuf>,
 }
 
 pub(crate) struct Notification<'a> {
     pub(crate) caller: &'a str,
-    pub(crate) channel: &'a str,
+    pub(crate) profile: &'a str,
     pub(crate) severity: Severity,
     pub(crate) title: Option<&'a str>,
     pub(crate) message: &'a str,
 }
 
-pub(crate) fn validate_channel(name: &str, channel: &NotificationChannel) -> Result<()> {
-    if channel.allowed_callers().is_empty() {
-        return Err(anyhow!(
-            "notification.channels.{name}.allowed_callers must not be empty"
-        ));
-    }
-    for caller in channel.allowed_callers() {
-        validate_caller(caller)?;
-    }
-    match channel {
-        NotificationChannel::Telegram(channel) => {
-            validate_secret_ref(
-                &format!("notification.channels.{name}.bot_token"),
-                channel.bot_token_env.as_deref(),
-                channel.bot_token_file.as_deref(),
-            )?;
-            if channel.chat_id.trim().is_empty() {
-                return Err(anyhow!(
-                    "notification.channels.{name}.chat_id must not be empty"
-                ));
-            }
-        }
-        NotificationChannel::Discord(channel) => {
-            validate_secret_ref(
-                &format!("notification.channels.{name}.webhook_url"),
-                channel.webhook_url_env.as_deref(),
-                channel.webhook_url_file.as_deref(),
-            )?;
-        }
-    }
-    Ok(())
+pub(crate) fn validate_telegram_profile(name: &str, profile: &TelegramProfile) -> Result<()> {
+    validate_secret_ref(
+        &format!("telegram.profiles.{name}.bot_token"),
+        profile.bot_token_env.as_deref(),
+        profile.bot_token_file.as_deref(),
+    )
 }
 
-pub(crate) fn caller_is_allowed(channel: &NotificationChannel, caller: &str) -> bool {
-    channel
-        .allowed_callers()
-        .iter()
-        .any(|allowed| allowed == caller)
-}
-
-impl NotificationChannel {
-    fn allowed_callers(&self) -> &[String] {
-        match self {
-            Self::Telegram(channel) => &channel.allowed_callers,
-            Self::Discord(channel) => &channel.allowed_callers,
-        }
-    }
+pub(crate) fn validate_discord_profile(name: &str, profile: &DiscordProfile) -> Result<()> {
+    validate_secret_ref(
+        &format!("discord.profiles.{name}.webhook_url"),
+        profile.webhook_url_env.as_deref(),
+        profile.webhook_url_file.as_deref(),
+    )
 }
 
 pub(crate) fn validate_message_text(title: Option<&str>, message: &str) -> Result<()> {
@@ -133,33 +88,28 @@ pub(crate) fn validate_message_text(title: Option<&str>, message: &str) -> Resul
     Ok(())
 }
 
-pub(crate) fn send(channel: &NotificationChannel, notification: &Notification<'_>) -> Result<()> {
+pub(crate) fn send_telegram(
+    profile: &TelegramProfile,
+    chat_id: &str,
+    notification: &Notification<'_>,
+) -> Result<()> {
     validate_message_text(notification.title, notification.message)?;
+    if chat_id.trim().is_empty() {
+        return Err(anyhow!("telegram chat_id must not be empty"));
+    }
     let client = Client::builder()
         .timeout(DEFAULT_TIMEOUT)
         .build()
         .with_context(|| {
             format!(
                 "failed to create notification client for {}",
-                notification.channel
+                notification.profile
             )
         })?;
-
-    match channel {
-        NotificationChannel::Telegram(channel) => send_telegram(&client, channel, notification),
-        NotificationChannel::Discord(channel) => send_discord(&client, channel, notification),
-    }
-}
-
-fn send_telegram(
-    client: &Client,
-    channel: &TelegramChannel,
-    notification: &Notification<'_>,
-) -> Result<()> {
     let token = read_secret(
         "telegram bot token",
-        channel.bot_token_env.as_deref(),
-        channel.bot_token_file.as_deref(),
+        profile.bot_token_env.as_deref(),
+        profile.bot_token_file.as_deref(),
     )?;
     let base_url = if cfg!(debug_assertions) && std::env::var_os("AGENTD_TEST_OVERRIDES").is_some()
     {
@@ -170,29 +120,38 @@ fn send_telegram(
     };
     let url = format!("{}/bot{token}/sendMessage", base_url.trim_end_matches('/'));
     let payload = TelegramPayload {
-        chat_id: &channel.chat_id,
+        chat_id,
         text: &format_notification(notification),
         disable_web_page_preview: true,
     };
 
-    post_json(client, notification.channel, &url, &payload)
+    post_json(&client, notification.profile, &url, &payload)
 }
 
-fn send_discord(
-    client: &Client,
-    channel: &DiscordChannel,
+pub(crate) fn send_discord(
+    profile: &DiscordProfile,
     notification: &Notification<'_>,
 ) -> Result<()> {
+    validate_message_text(notification.title, notification.message)?;
+    let client = Client::builder()
+        .timeout(DEFAULT_TIMEOUT)
+        .build()
+        .with_context(|| {
+            format!(
+                "failed to create notification client for {}",
+                notification.profile
+            )
+        })?;
     let url = read_secret(
         "discord webhook url",
-        channel.webhook_url_env.as_deref(),
-        channel.webhook_url_file.as_deref(),
+        profile.webhook_url_env.as_deref(),
+        profile.webhook_url_file.as_deref(),
     )?;
     let payload = DiscordPayload {
         content: &format_notification(notification),
     };
 
-    post_json(client, notification.channel, &url, &payload)
+    post_json(&client, notification.profile, &url, &payload)
 }
 
 fn post_json<T>(client: &Client, channel: &str, url: &str, payload: &T) -> Result<()>
@@ -271,18 +230,6 @@ fn validate_secret_ref(name: &str, env: Option<&str>, file: Option<&Path>) -> Re
         (None, Some(file)) => Err(anyhow!("{name}_file must be absolute: {}", file.display())),
         _ => Err(anyhow!("{name} must configure env or file")),
     }
-}
-
-fn validate_caller(caller: &str) -> Result<()> {
-    if caller.is_empty()
-        || !caller
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.' | b'@' | b'-'))
-    {
-        return Err(anyhow!("invalid notification caller: {caller:?}"));
-    }
-
-    Ok(())
 }
 
 fn format_notification(notification: &Notification<'_>) -> String {

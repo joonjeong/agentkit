@@ -78,8 +78,52 @@ struct LogsArgs {
 
 #[derive(Debug, Args)]
 struct NotifyArgs {
-    /// Notification channel name allowlisted for the caller.
-    channel: String,
+    #[command(subcommand)]
+    provider: NotifyProviderCommand,
+}
+
+#[derive(Debug, Subcommand)]
+enum NotifyProviderCommand {
+    /// Send a Telegram notification through an agentd Telegram profile.
+    Telegram(TelegramNotifyArgs),
+    /// Send a Discord notification through an agentd Discord profile.
+    Discord(DiscordNotifyArgs),
+}
+
+#[derive(Debug, Args)]
+struct TelegramNotifyArgs {
+    /// Telegram profile name from agentd config.
+    profile: String,
+
+    /// Telegram chat id to send to.
+    #[arg(long)]
+    chat_id: String,
+
+    /// agentd Unix domain socket path.
+    #[arg(
+        long,
+        env = "AGENTCTL_AGENTD_SOCKET",
+        default_value = DEFAULT_AGENTD_SOCKET_PATH
+    )]
+    agentd_socket: PathBuf,
+
+    /// Notification severity.
+    #[arg(long, value_enum, default_value_t = Severity::Info)]
+    severity: Severity,
+
+    /// Optional short notification title.
+    #[arg(long)]
+    title: Option<String>,
+
+    /// Notification message body.
+    #[arg(long)]
+    message: String,
+}
+
+#[derive(Debug, Args)]
+struct DiscordNotifyArgs {
+    /// Discord profile name from agentd config.
+    profile: String,
 
     /// agentd Unix domain socket path.
     #[arg(
@@ -290,32 +334,73 @@ fn template_config(args: ConfigTemplateArgs) -> Result<i32> {
 }
 
 fn notify(args: NotifyArgs) -> Result<i32> {
-    validate_target(&args.channel)?;
-    notification::validate_message_text(args.title.as_deref(), &args.message)?;
+    match args.provider {
+        NotifyProviderCommand::Telegram(args) => notify_via_agentd(
+            "telegram",
+            &args.profile,
+            Some(&args.chat_id),
+            &args.agentd_socket,
+            args.severity,
+            args.title.as_deref(),
+            &args.message,
+        ),
+        NotifyProviderCommand::Discord(args) => notify_via_agentd(
+            "discord",
+            &args.profile,
+            None,
+            &args.agentd_socket,
+            args.severity,
+            args.title.as_deref(),
+            &args.message,
+        ),
+    }
+}
+
+fn notify_via_agentd(
+    provider: &'static str,
+    profile: &str,
+    chat_id: Option<&str>,
+    agentd_socket: &Path,
+    severity: Severity,
+    title: Option<&str>,
+    message: &str,
+) -> Result<i32> {
+    validate_target(profile)?;
+    if let Some(chat_id) = chat_id {
+        if chat_id.trim().is_empty() {
+            return Err(Error::InvalidNotificationOption(
+                "telegram chat_id must not be empty".to_owned(),
+            ));
+        }
+    }
+    notification::validate_message_text(title, message)?;
 
     let caller = caller_from_sudo()?;
+    let target = format!("{provider}:{profile}");
     let audit_path = audit::configured_audit_log_path();
     audit::write(
         &audit_path,
         &caller,
         Action::Notify.as_str(),
-        &args.channel,
+        &target,
         "delegate",
         Some("agentd"),
     )?;
     let notification = Notification {
         caller: &caller,
-        channel: &args.channel,
-        severity: args.severity,
-        title: args.title.as_deref(),
-        message: &args.message,
+        provider,
+        profile,
+        chat_id,
+        severity,
+        title,
+        message,
     };
-    notification::send_via_agentd(&args.agentd_socket, &notification)?;
+    notification::send_via_agentd(agentd_socket, &notification)?;
     audit::write(
         &audit_path,
         &caller,
         Action::Notify.as_str(),
-        &args.channel,
+        &target,
         "executed",
         Some("sent"),
     )?;

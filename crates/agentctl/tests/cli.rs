@@ -79,7 +79,7 @@ fn config_explain_dumps_validated_config() {
                 .and(predicate::str::contains("service restart hermes"))
                 .and(predicate::str::contains("service status cloudflared"))
                 .and(predicate::str::contains("logs tailscale"))
-                .and(predicate::str::contains("notify telegram_myriad").not()),
+                .and(predicate::str::contains("notify telegram myriad").not()),
         );
 
     fs::remove_dir_all(temp).expect("temporary directory removed");
@@ -253,7 +253,10 @@ fn notify_posts_to_allowlisted_telegram_channel() {
         .expect("binary exists")
         .args([
             "notify",
-            "telegram_myriad",
+            "telegram",
+            "myriad",
+            "--chat-id",
+            "123456789",
             "--severity",
             "critical",
             "--title",
@@ -274,17 +277,19 @@ fn notify_posts_to_allowlisted_telegram_channel() {
     assert!(request.contains(r#""type":"notify""#));
     assert!(request.contains(r#""version":1"#));
     assert!(request.contains(r#""caller":"hermes""#));
-    assert!(request.contains(r#""channel":"telegram_myriad""#));
+    assert!(request.contains(r#""provider":"telegram""#));
+    assert!(request.contains(r#""profile":"myriad""#));
+    assert!(request.contains(r#""chat_id":"123456789""#));
     assert!(request.contains(r#""severity":"critical""#));
     assert!(request.contains(r#""title":"disk full""#));
     assert!(request.contains(r#""message":"/var is 95%""#));
 
     let audit_log = fs::read_to_string(audit).expect("audit log");
     assert!(audit_log.contains(
-        "caller=hermes action=notify target=telegram_myriad result=delegate reason=agentd"
+        "caller=hermes action=notify target=telegram:myriad result=delegate reason=agentd"
     ));
     assert!(audit_log.contains(
-        "caller=hermes action=notify target=telegram_myriad result=executed reason=sent"
+        "caller=hermes action=notify target=telegram:myriad result=executed reason=sent"
     ));
 
     fs::remove_file(socket_path).expect("socket removed");
@@ -315,7 +320,8 @@ service_read = ["hermes"]
         .expect("binary exists")
         .args([
             "notify",
-            "discord_myriad",
+            "discord",
+            "myriad",
             "--severity",
             "warning",
             "--message",
@@ -333,7 +339,8 @@ service_read = ["hermes"]
     let request = agentd.join().expect("agentd request captured");
     assert!(request.contains(r#""type":"notify""#));
     assert!(request.contains(r#""caller":"hermes""#));
-    assert!(request.contains(r#""channel":"discord_myriad""#));
+    assert!(request.contains(r#""provider":"discord""#));
+    assert!(request.contains(r#""profile":"myriad""#));
     assert!(request.contains(r#""severity":"warning""#));
     assert!(request.contains(r#""message":"service degraded""#));
 
@@ -349,14 +356,17 @@ fn notify_reports_agentd_rejection() {
     let socket_path = short_socket_path("agentctl-denied");
     let agentd = agentd_notify_response_server(
         &socket_path,
-        r#"{"status":"error","version":1,"error":"caller \"hermes\" is not allowed to use notification channel \"telegram_other\""}"#,
+        r#"{"status":"error","version":1,"error":"telegram profile not found: other"}"#,
     );
 
     Command::cargo_bin("agentctl")
         .expect("binary exists")
         .args([
             "notify",
-            "telegram_other",
+            "telegram",
+            "other",
+            "--chat-id",
+            "123456789",
             "--message",
             "should not send",
             "--agentd-socket",
@@ -371,11 +381,12 @@ fn notify_reports_agentd_rejection() {
         .stderr(predicate::str::contains("agentd rejected request"));
 
     let request = agentd.join().expect("agentd request captured");
-    assert!(request.contains(r#""channel":"telegram_other""#));
+    assert!(request.contains(r#""provider":"telegram""#));
+    assert!(request.contains(r#""profile":"other""#));
 
     let audit_log = fs::read_to_string(audit).expect("audit log");
     assert!(audit_log.contains(
-        "caller=hermes action=notify target=telegram_other result=delegate reason=agentd"
+        "caller=hermes action=notify target=telegram:other result=delegate reason=agentd"
     ));
 
     fs::remove_file(socket_path).expect("socket removed");

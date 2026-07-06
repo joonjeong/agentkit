@@ -6,13 +6,14 @@ use anyhow::{anyhow, Context, Result};
 use reqwest::Url;
 use serde::Deserialize;
 
-use crate::notification::NotificationChannel;
+use crate::notification::{DiscordProfile, TelegramProfile};
 
 #[derive(Debug, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct AgentdConfigFile {
     pub(crate) github_app: Option<GithubConfigFile>,
-    pub(crate) notification: Option<NotificationConfigFile>,
+    pub(crate) telegram: Option<TelegramConfigFile>,
+    pub(crate) discord: Option<DiscordConfigFile>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -50,13 +51,6 @@ pub(crate) struct GithubConfigProfile {
     pub(crate) permissions: BTreeMap<String, String>,
 }
 
-#[derive(Debug, Deserialize, Default)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct NotificationConfigFile {
-    #[serde(default)]
-    pub(crate) channels: BTreeMap<String, NotificationChannel>,
-}
-
 pub(crate) fn load(path: &Path) -> Result<AgentdConfigFile> {
     let contents = fs::read_to_string(path)
         .with_context(|| format!("failed to read agentd config {}", path.display()))?;
@@ -65,17 +59,17 @@ pub(crate) fn load(path: &Path) -> Result<AgentdConfigFile> {
 }
 
 pub(crate) fn validate(config: &AgentdConfigFile, path: &Path) -> Result<()> {
-    if config.github_app.is_none() && config.notification.is_none() {
-        return Err(anyhow!(
-            "missing [github_app] or [notification] section in {}",
-            path.display()
-        ));
+    if config.github_app.is_none() && config.telegram.is_none() && config.discord.is_none() {
+        return Err(anyhow!("missing provider section in {}", path.display()));
     };
     if let Some(github_app) = &config.github_app {
         validate_github_app(github_app, path)?;
     }
-    if let Some(notification) = &config.notification {
-        validate_notification(notification, path)?;
+    if let Some(telegram) = &config.telegram {
+        validate_telegram(telegram, path)?;
+    }
+    if let Some(discord) = &config.discord {
+        validate_discord(discord, path)?;
     }
     Ok(())
 }
@@ -140,29 +134,61 @@ fn validate_github_app(github_app: &GithubConfigFile, path: &Path) -> Result<()>
     Ok(())
 }
 
-fn validate_notification(notification: &NotificationConfigFile, path: &Path) -> Result<()> {
-    if notification.channels.is_empty() {
+#[derive(Debug, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct TelegramConfigFile {
+    #[serde(default)]
+    pub(crate) profiles: BTreeMap<String, TelegramProfile>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct DiscordConfigFile {
+    #[serde(default)]
+    pub(crate) profiles: BTreeMap<String, DiscordProfile>,
+}
+
+fn validate_telegram(telegram: &TelegramConfigFile, path: &Path) -> Result<()> {
+    if telegram.profiles.is_empty() {
+        return Err(anyhow!("missing telegram profiles in {}", path.display()));
+    }
+    for (name, profile) in &telegram.profiles {
+        validate_profile_name(name, path)?;
+        crate::notification::validate_telegram_profile(name, profile)
+            .with_context(|| format!("invalid telegram profile {name:?} in {}", path.display()))?;
+    }
+    Ok(())
+}
+
+fn validate_discord(discord: &DiscordConfigFile, path: &Path) -> Result<()> {
+    if discord.profiles.is_empty() {
+        return Err(anyhow!("missing discord profiles in {}", path.display()));
+    }
+    for (name, profile) in &discord.profiles {
+        validate_profile_name(name, path)?;
+        crate::notification::validate_discord_profile(name, profile)
+            .with_context(|| format!("invalid discord profile {name:?} in {}", path.display()))?;
+    }
+    Ok(())
+}
+
+fn validate_profile_name(name: &str, path: &Path) -> Result<()> {
+    if name.is_empty() {
         return Err(anyhow!(
-            "missing notification channels in {}",
+            "profile name must not be empty in {}",
             path.display()
         ));
     }
-    for (name, channel) in &notification.channels {
-        if name.is_empty() {
-            return Err(anyhow!(
-                "notification channel name must not be empty in {}",
-                path.display()
-            ));
-        }
-        validate_channel_name(name)?;
-        crate::notification::validate_channel(name, channel).with_context(|| {
-            format!(
-                "invalid notification channel {name:?} in {}",
-                path.display()
-            )
-        })?;
+    if name
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.'))
+    {
+        Ok(())
+    } else {
+        Err(anyhow!(
+            "profile name may contain only ASCII letters, numbers, '_', '-', or '.': {name:?}"
+        ))
     }
-    Ok(())
 }
 
 fn validate_api_url(api_url: &str, path: &Path) -> Result<()> {
@@ -207,17 +233,4 @@ fn validate_repo_scope(repo: &str) -> Result<()> {
         return Err(anyhow!("expected OWNER/REPO, got {repo:?}"));
     }
     Ok(())
-}
-
-fn validate_channel_name(name: &str) -> Result<()> {
-    if name
-        .chars()
-        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.'))
-    {
-        Ok(())
-    } else {
-        Err(anyhow!(
-            "notification channel name may contain only ASCII letters, numbers, '_', '-', or '.': {name:?}"
-        ))
-    }
 }
