@@ -1,8 +1,8 @@
 # agentd
 
-`agentd` is a local credential broker for agent tools. It owns system-wide
-provider profiles and long-lived secret access, then serves short-lived
-credentials to local clients over a Unix domain socket.
+`agentd` is a local service broker for agent tools. It owns system-wide provider
+profiles and long-lived secret access, then serves short-lived credentials and
+notification delivery to local clients over a Unix domain socket.
 
 For now, the supported providers are GitHub App authentication and Telegram or
 Discord notification delivery.
@@ -40,6 +40,13 @@ Validate and run the broker with:
 ```sh
 agentd config check --config-path /etc/agentkit/agentd.toml
 agentd serve --config-path /etc/agentkit/agentd.toml --socket-path /run/agentd/agentd.sock
+```
+
+Bootstrap a host from a downloaded or locally copied binary:
+
+```sh
+sudo ./agentd bootstrap
+sudo ./agentd bootstrap --backend openrc
 ```
 
 Print the full example config with:

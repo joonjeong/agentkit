@@ -11,6 +11,107 @@ use std::time::{SystemTime, UNIX_EPOCH};
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[test]
+fn bootstrap_installs_binary_and_writes_default_config() {
+    let temp = unique_temp_dir("agentd-bootstrap-test");
+    fs::create_dir(&temp).expect("temp dir created");
+    let source_binary = temp.join("source/agentd");
+    let binary = temp.join("bin/agentd");
+    let config = temp.join("etc/agentd.toml");
+    let service = temp.join("systemd/agentd.service");
+    let socket = temp.join("run/agentd.sock");
+    fs::create_dir(source_binary.parent().expect("source parent")).expect("source parent created");
+    fs::write(&source_binary, b"fake agentd binary").expect("source binary written");
+
+    Command::cargo_bin("agentd")
+        .expect("binary exists")
+        .args([
+            "bootstrap",
+            "--source-binary",
+            source_binary.to_str().expect("utf-8 path"),
+            "--binary-path",
+            binary.to_str().expect("utf-8 path"),
+            "--config-path",
+            config.to_str().expect("utf-8 path"),
+            "--socket-path",
+            socket.to_str().expect("utf-8 path"),
+            "--service-path",
+            service.to_str().expect("utf-8 path"),
+        ])
+        .env("AGENTD_TEST_OVERRIDES", "1")
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("binary ready:")
+                .and(predicate::str::contains("config ready:"))
+                .and(predicate::str::contains("service ready:")),
+        );
+
+    assert_eq!(
+        fs::read(&binary).expect("installed binary"),
+        b"fake agentd binary"
+    );
+    let config_contents = fs::read_to_string(&config).expect("config written");
+    assert!(config_contents.contains("[github_app]"));
+    assert!(config_contents.contains("[telegram.profiles.myriad]"));
+    assert!(config_contents.contains("[discord.profiles.myriad]"));
+    let service_contents = fs::read_to_string(service).expect("service written");
+    assert!(service_contents.contains("[Service]"));
+    assert!(service_contents.contains(&format!(
+        "ExecStart={} serve --config-path {} --socket-path {}",
+        binary.display(),
+        config.display(),
+        socket.display()
+    )));
+
+    fs::remove_dir_all(temp).expect("config dir removed");
+}
+
+#[test]
+fn bootstrap_can_write_openrc_service() {
+    let temp = unique_temp_dir("agentd-bootstrap-openrc-test");
+    fs::create_dir(&temp).expect("temp dir created");
+    let source_binary = temp.join("source/agentd");
+    let binary = temp.join("bin/agentd");
+    let config = temp.join("etc/agentd.toml");
+    let service = temp.join("init.d/agentd");
+    let socket = temp.join("run/agentd.sock");
+    fs::create_dir(source_binary.parent().expect("source parent")).expect("source parent created");
+    fs::write(&source_binary, b"fake agentd binary").expect("source binary written");
+
+    Command::cargo_bin("agentd")
+        .expect("binary exists")
+        .args([
+            "bootstrap",
+            "--backend",
+            "openrc",
+            "--source-binary",
+            source_binary.to_str().expect("utf-8 path"),
+            "--binary-path",
+            binary.to_str().expect("utf-8 path"),
+            "--config-path",
+            config.to_str().expect("utf-8 path"),
+            "--socket-path",
+            socket.to_str().expect("utf-8 path"),
+            "--service-path",
+            service.to_str().expect("utf-8 path"),
+        ])
+        .env("AGENTD_TEST_OVERRIDES", "1")
+        .assert()
+        .success();
+
+    let service_contents = fs::read_to_string(service).expect("service written");
+    assert!(service_contents.contains("#!/sbin/openrc-run"));
+    assert!(service_contents.contains(&format!("command=\"{}\"", binary.display())));
+    assert!(service_contents.contains(&format!(
+        "command_args=\"serve --config-path {} --socket-path {}\"",
+        config.display(),
+        socket.display()
+    )));
+
+    fs::remove_dir_all(temp).expect("config dir removed");
+}
+
+#[test]
 fn config_check_accepts_valid_github_app_profile() {
     let config_dir = unique_temp_dir("agentd-config-check-test");
     fs::create_dir(&config_dir).expect("config dir created");

@@ -1,3 +1,4 @@
+mod bootstrap;
 mod config;
 mod github;
 mod notification;
@@ -21,7 +22,7 @@ const VERSION: &str = match option_env!("AGENTKIT_VERSION") {
 #[derive(Debug, Parser)]
 #[command(name = "agentd")]
 #[command(version = VERSION)]
-#[command(about = "Local agent credential broker")]
+#[command(about = "Local agent service broker")]
 struct AgentdCli {
     #[command(subcommand)]
     command: CommandLine,
@@ -29,7 +30,9 @@ struct AgentdCli {
 
 #[derive(Debug, Subcommand)]
 enum CommandLine {
-    /// Serve local credential requests over a Unix domain socket.
+    /// Bootstrap local installation and system-wide config.
+    Bootstrap(bootstrap::BootstrapArgs),
+    /// Serve local credential and notification requests over a Unix domain socket.
     Serve(ServeArgs),
     /// Validate or print agentd config.
     Config(ConfigArgs),
@@ -82,6 +85,7 @@ where
     }
     let cli = AgentdCli::parse_from(args);
     match cli.command {
+        CommandLine::Bootstrap(args) => bootstrap::run(args),
         CommandLine::Serve(args) => serve(args),
         CommandLine::Config(args) => config(args),
     }

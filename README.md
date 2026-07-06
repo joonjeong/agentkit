@@ -8,7 +8,7 @@ This repository is a Cargo workspace for small, focused tools:
 
 ```text
 crates/
-  agentd/       local credential broker for agent tools
+  agentd/       local service broker for agent tools
   agentctl/  config-driven restricted executor for homelab operations
 ```
 
@@ -21,9 +21,9 @@ cargo build --release --bin agentctl
 
 ## agentd
 
-`agentd` is a local credential broker. It owns system-wide provider profiles and
-long-lived secret access, then serves short-lived credentials to local clients
-over a Unix domain socket.
+`agentd` is a local service broker. It owns system-wide provider profiles and
+long-lived secret access, then serves short-lived credentials and notification
+delivery to local clients over a Unix domain socket.
 
 For now, `agentd` mints GitHub App installation tokens:
 
