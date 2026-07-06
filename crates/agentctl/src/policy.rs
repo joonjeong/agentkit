@@ -57,7 +57,7 @@ pub fn allowed_targets(policy: &CallerPolicy, action: Action) -> &[String] {
         | Action::ServiceRestart
         | Action::ServiceReload => &policy.service_control,
         Action::ServiceStatus | Action::Logs => &policy.service_read,
-        Action::Notify => &policy.notify,
+        Action::Notify => &[],
     }
 }
 

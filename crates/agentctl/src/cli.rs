@@ -17,6 +17,7 @@ const VERSION: &str = match option_env!("AGENTKIT_VERSION") {
     None => env!("CARGO_PKG_VERSION"),
 };
 const DEFAULT_LOG_LINES: u32 = 200;
+const DEFAULT_AGENTD_SOCKET_PATH: &str = "/run/agentd/agentd.sock";
 
 #[derive(Debug, Parser)]
 #[command(name = "agentctl")]
@@ -77,8 +78,16 @@ struct LogsArgs {
 
 #[derive(Debug, Args)]
 struct NotifyArgs {
-    /// Notification channel name from config channels.
+    /// Notification channel name allowlisted for the caller.
     channel: String,
+
+    /// agentd Unix domain socket path.
+    #[arg(
+        long,
+        env = "AGENTCTL_AGENTD_SOCKET",
+        default_value = DEFAULT_AGENTD_SOCKET_PATH
+    )]
+    agentd_socket: PathBuf,
 
     /// Notification severity.
     #[arg(long, value_enum, default_value_t = Severity::Info)]
@@ -164,7 +173,7 @@ where
             }
         },
         Command::Logs(args) => execute(Action::Logs, &args.service, Some(args.lines), &config_path),
-        Command::Notify(args) => notify(args, &config_path),
+        Command::Notify(args) => notify(args),
         Command::Config(command) => match command.command {
             ConfigSubcommand::Check(args) => {
                 check_config(args.config_path.as_deref().unwrap_or(&config_path))
@@ -233,7 +242,6 @@ fn explain_config(config_path: &Path) -> Result<i32> {
             "    service_read: {}",
             format_string_list(&caller_policy.service_read)
         );
-        println!("    notify: {}", format_string_list(&caller_policy.notify));
         println!("    commands:");
         for service in &caller_policy.service_control {
             println!("      service start {service}");
@@ -246,9 +254,6 @@ fn explain_config(config_path: &Path) -> Result<i32> {
             if config.backend() == crate::config::Backend::Systemd {
                 println!("      logs {service}");
             }
-        }
-        for channel in &caller_policy.notify {
-            println!("      notify {channel}");
         }
     }
 
@@ -284,56 +289,19 @@ fn template_config(args: ConfigTemplateArgs) -> Result<i32> {
     Ok(0)
 }
 
-fn notify(args: NotifyArgs, config_path: &Path) -> Result<i32> {
+fn notify(args: NotifyArgs) -> Result<i32> {
     validate_target(&args.channel)?;
     notification::validate_message_text(args.title.as_deref(), &args.message)?;
 
     let caller = caller_from_sudo()?;
-    let config = load_valid_config(config_path)?;
     let audit_path = audit::configured_audit_log_path();
-    let Some(caller_policy) = config.callers.get(&caller) else {
-        audit::write(
-            &audit_path,
-            &caller,
-            Action::Notify.as_str(),
-            &args.channel,
-            "deny",
-            Some("caller_not_allowed"),
-        )?;
-        return Err(Error::CallerNotAllowed(caller));
-    };
-
-    if !is_allowed(caller_policy, Action::Notify, &args.channel) {
-        audit::write(
-            &audit_path,
-            &caller,
-            Action::Notify.as_str(),
-            &args.channel,
-            "deny",
-            Some("channel_not_allowed"),
-        )?;
-        return Err(Error::NotificationChannelNotAllowed(args.channel));
-    }
-
-    let Some(channel) = config.notification_channel(&args.channel) else {
-        audit::write(
-            &audit_path,
-            &caller,
-            Action::Notify.as_str(),
-            &args.channel,
-            "deny",
-            Some("channel_not_found"),
-        )?;
-        return Err(Error::NotificationChannelNotFound(args.channel));
-    };
-
     audit::write(
         &audit_path,
         &caller,
         Action::Notify.as_str(),
         &args.channel,
-        "allow",
-        None,
+        "delegate",
+        Some("agentd"),
     )?;
     let notification = Notification {
         caller: &caller,
@@ -342,7 +310,7 @@ fn notify(args: NotifyArgs, config_path: &Path) -> Result<i32> {
         title: args.title.as_deref(),
         message: &args.message,
     };
-    notification::send(channel, &notification)?;
+    notification::send_via_agentd(&args.agentd_socket, &notification)?;
     audit::write(
         &audit_path,
         &caller,

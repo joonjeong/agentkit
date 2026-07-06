@@ -4,7 +4,8 @@
 provider profiles and long-lived secret access, then serves short-lived
 credentials to local clients over a Unix domain socket.
 
-For now, the supported provider is GitHub App authentication.
+For now, the supported providers are GitHub App authentication and Telegram or
+Discord notification delivery.
 
 ## Configuration
 
@@ -26,6 +27,17 @@ path = "/etc/agentd/secrets/codex-review-github-app.private-key.pem"
 [github_app.profiles.codex-review.permissions]
 contents = "read"
 pull_requests = "read"
+
+[notification.channels.telegram_myriad]
+type = "telegram"
+allowed_callers = ["hermes"]
+chat_id = "123456789"
+bot_token_file = "/etc/agentd/secrets/telegram-bot-token"
+
+[notification.channels.discord_myriad]
+type = "discord"
+allowed_callers = ["hermes"]
+webhook_url_file = "/etc/agentd/secrets/discord-webhook-url"
 ```
 
 Validate and run the broker with:
@@ -69,3 +81,20 @@ Error response:
 Requests for `repos` and `permissions` are treated as subsets of the selected
 system-wide profile. agentd rejects requests outside the configured profile
 instead of letting clients widen their own scope.
+
+Notification request:
+
+```json
+{"version":1,"type":"notify","caller":"hermes","channel":"telegram_myriad","severity":"critical","title":"disk full","message":"/var is 95%"}
+```
+
+Successful notification response:
+
+```json
+{"status":"ok","version":1}
+```
+
+Notification channels live under `[notification.channels.<name>]` in the agentd
+config. Each channel requires `allowed_callers`. Telegram channels require
+`chat_id` plus either `bot_token_file` or `bot_token_env`. Discord channels
+require either `webhook_url_file` or `webhook_url_env`.

@@ -82,24 +82,12 @@ version = 1
 backend = "systemd"
 max_log_lines = 1000
 
-[channels.telegram_myriad]
-type = "telegram"
-chat_id = "123456789"
-bot_token_file = "/etc/agentctl/secrets/telegram-bot-token"
-
-[channels.discord_myriad]
-type = "discord"
-webhook_url_file = "/etc/agentctl/secrets/discord-webhook-url"
-
 [callers.hermes]
 # service start, stop, restart, reload 허용
 service_control = ["hermes", "cloudflared", "tailscale"]
 
 # service status와 logs 허용
 service_read = ["hermes", "cloudflared", "tailscale"]
-
-# provider credential을 caller에게 노출하지 않고 알림 전송 허용
-notify = ["telegram_myriad", "discord_myriad"]
 ```
 
 호출자는 `SUDO_USER`에서 읽습니다. 예를 들어 `hermes`가 다음을 실행하면:
@@ -151,10 +139,9 @@ sudo /usr/local/sbin/agentctl version
 - raw `apt`
 - `ansible-playbook`
 
-알림 채널은 `[channels.<name>]` 아래에 `type = "telegram"` 또는
-`type = "discord"`로 설정하고, caller별 `notify`로 허용합니다. Telegram
-채널은 `chat_id`와 `bot_token_file` 또는 `bot_token_env`가 필요합니다.
-Discord 채널은 `webhook_url_file` 또는 `webhook_url_env`가 필요합니다.
+`agentctl notify`는 Unix domain socket을 통해 알림 전송을 `agentd`에
+위임합니다. Telegram과 Discord 채널 credential 및 허용 caller는 agentctl
+config가 아니라 `/etc/agentd/config.toml`에 설정합니다.
 
 ## 확인
 

@@ -23,7 +23,6 @@ dependencies = [
  "clap",
  "libc",
  "predicates",
- "reqwest",
  "serde",
  "serde_json",
  "thiserror",

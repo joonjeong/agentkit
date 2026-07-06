@@ -47,3 +47,14 @@ args = ["read", "op://ops/github-apps/hermes-release/private-key"]
 contents = "write"
 pull_requests = "write"
 actions = "write"
+
+[notification.channels.telegram_myriad]
+type = "telegram"
+allowed_callers = ["hermes"]
+chat_id = "123456789"
+bot_token_file = "/etc/agentd/secrets/telegram-bot-token"
+
+[notification.channels.discord_myriad]
+type = "discord"
+allowed_callers = ["hermes"]
+webhook_url_file = "/etc/agentd/secrets/discord-webhook-url"

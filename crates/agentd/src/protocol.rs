@@ -3,6 +3,8 @@ use std::collections::BTreeMap;
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 
+use crate::notification::Severity;
+
 pub(crate) const WIRE_PROTOCOL_VERSION: u32 = 1;
 
 #[derive(Debug, Deserialize)]
@@ -16,6 +18,14 @@ pub(crate) enum WireRequest {
         #[serde(default)]
         permissions: BTreeMap<String, String>,
     },
+    Notify {
+        version: u32,
+        caller: String,
+        channel: String,
+        severity: Severity,
+        title: Option<String>,
+        message: String,
+    },
 }
 
 #[derive(Debug, Serialize)]
@@ -23,9 +33,12 @@ pub(crate) enum WireRequest {
 pub(crate) enum WireResponse {
     Ok {
         version: u32,
-        token: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        token: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
         expires_at: Option<String>,
-        api_url: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        api_url: Option<String>,
     },
     Error {
         version: u32,
@@ -47,12 +60,21 @@ impl WireRequest {
 }
 
 impl WireResponse {
-    pub(crate) fn ok(token: String, expires_at: Option<String>, api_url: String) -> Self {
+    pub(crate) fn github_token(token: String, expires_at: Option<String>, api_url: String) -> Self {
         Self::Ok {
             version: WIRE_PROTOCOL_VERSION,
-            token,
+            token: Some(token),
             expires_at,
-            api_url,
+            api_url: Some(api_url),
+        }
+    }
+
+    pub(crate) fn ok() -> Self {
+        Self::Ok {
+            version: WIRE_PROTOCOL_VERSION,
+            token: None,
+            expires_at: None,
+            api_url: None,
         }
     }
 

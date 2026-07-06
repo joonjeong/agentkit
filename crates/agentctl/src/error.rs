@@ -31,11 +31,17 @@ pub enum Error {
     #[error("invalid notification option: {0}")]
     InvalidNotificationOption(String),
 
-    #[error("notification channel not allowed: {0}")]
-    NotificationChannelNotAllowed(String),
+    #[error("agentd rejected request: {0}")]
+    AgentdRejected(String),
 
-    #[error("notification channel not found: {0}")]
-    NotificationChannelNotFound(String),
+    #[error("agentd protocol error: {reason}")]
+    AgentdProtocol { reason: String },
+
+    #[error("failed to connect to agentd socket {path}: {source}")]
+    AgentdConnect {
+        path: PathBuf,
+        source: std::io::Error,
+    },
 
     #[error("bootstrap must be run as root")]
     BootstrapRequiresRoot,
@@ -69,9 +75,6 @@ pub enum Error {
 
     #[error("command failed: {program} {args}")]
     CommandFailed { program: String, args: String },
-
-    #[error("notification send failed for {destination}: {reason}")]
-    NotificationSend { destination: String, reason: String },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

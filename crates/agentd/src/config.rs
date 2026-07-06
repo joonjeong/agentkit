@@ -6,10 +6,13 @@ use anyhow::{anyhow, Context, Result};
 use reqwest::Url;
 use serde::Deserialize;
 
+use crate::notification::NotificationChannel;
+
 #[derive(Debug, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct AgentdConfigFile {
     pub(crate) github_app: Option<GithubConfigFile>,
+    pub(crate) notification: Option<NotificationConfigFile>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -47,6 +50,13 @@ pub(crate) struct GithubConfigProfile {
     pub(crate) permissions: BTreeMap<String, String>,
 }
 
+#[derive(Debug, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct NotificationConfigFile {
+    #[serde(default)]
+    pub(crate) channels: BTreeMap<String, NotificationChannel>,
+}
+
 pub(crate) fn load(path: &Path) -> Result<AgentdConfigFile> {
     let contents = fs::read_to_string(path)
         .with_context(|| format!("failed to read agentd config {}", path.display()))?;
@@ -55,12 +65,26 @@ pub(crate) fn load(path: &Path) -> Result<AgentdConfigFile> {
 }
 
 pub(crate) fn validate(config: &AgentdConfigFile, path: &Path) -> Result<()> {
-    let Some(github_app) = &config.github_app else {
+    if config.github_app.is_none() && config.notification.is_none() {
         return Err(anyhow!(
-            "missing [github_app] section in {}",
+            "missing [github_app] or [notification] section in {}",
             path.display()
         ));
     };
+    if let Some(github_app) = &config.github_app {
+        validate_github_app(github_app, path)?;
+    }
+    if let Some(notification) = &config.notification {
+        validate_notification(notification, path)?;
+    }
+    Ok(())
+}
+
+pub(crate) fn example() -> &'static str {
+    include_str!("../resources/examples/config.example.toml")
+}
+
+fn validate_github_app(github_app: &GithubConfigFile, path: &Path) -> Result<()> {
     if github_app.profiles.is_empty() {
         return Err(anyhow!("missing github_app profiles in {}", path.display()));
     }
@@ -116,8 +140,29 @@ pub(crate) fn validate(config: &AgentdConfigFile, path: &Path) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn example() -> &'static str {
-    include_str!("../resources/examples/config.example.toml")
+fn validate_notification(notification: &NotificationConfigFile, path: &Path) -> Result<()> {
+    if notification.channels.is_empty() {
+        return Err(anyhow!(
+            "missing notification channels in {}",
+            path.display()
+        ));
+    }
+    for (name, channel) in &notification.channels {
+        if name.is_empty() {
+            return Err(anyhow!(
+                "notification channel name must not be empty in {}",
+                path.display()
+            ));
+        }
+        validate_channel_name(name)?;
+        crate::notification::validate_channel(name, channel).with_context(|| {
+            format!(
+                "invalid notification channel {name:?} in {}",
+                path.display()
+            )
+        })?;
+    }
+    Ok(())
 }
 
 fn validate_api_url(api_url: &str, path: &Path) -> Result<()> {
@@ -162,4 +207,17 @@ fn validate_repo_scope(repo: &str) -> Result<()> {
         return Err(anyhow!("expected OWNER/REPO, got {repo:?}"));
     }
     Ok(())
+}
+
+fn validate_channel_name(name: &str) -> Result<()> {
+    if name
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.'))
+    {
+        Ok(())
+    } else {
+        Err(anyhow!(
+            "notification channel name may contain only ASCII letters, numbers, '_', '-', or '.': {name:?}"
+        ))
+    }
 }

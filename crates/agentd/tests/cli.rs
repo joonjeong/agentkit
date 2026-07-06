@@ -145,6 +145,112 @@ fn serve_once_rejects_repo_outside_profile_scope() {
     fs::remove_dir_all(config_dir).expect("config dir removed");
 }
 
+#[test]
+fn serve_once_sends_telegram_notification_over_uds() {
+    let config_dir = unique_temp_dir("agentd-notify-test");
+    fs::create_dir(&config_dir).expect("config dir created");
+    let config_path = write_config(&config_dir, "https://api.github.com");
+    let socket_path = config_dir.join("agentd.sock");
+    let record_path = config_dir.join("notification.record");
+
+    let mut agentd = std::process::Command::new(assert_cmd::cargo::cargo_bin("agentd"))
+        .args([
+            "serve",
+            "--once",
+            "--config-path",
+            config_path.to_str().expect("utf-8 config path"),
+            "--socket-path",
+            socket_path.to_str().expect("utf-8 socket path"),
+        ])
+        .env("AGENTD_TEST_OVERRIDES", "1")
+        .env("AGENTD_TELEGRAM_API_BASE", "https://telegram.test")
+        .env("AGENTD_NOTIFICATION_RECORD_PATH", &record_path)
+        .env("AGENTD_TEST_TELEGRAM_TOKEN", "telegram-token")
+        .spawn()
+        .expect("agentd starts");
+
+    wait_for_socket(&socket_path);
+    let mut stream = UnixStream::connect(&socket_path).expect("client connects");
+    stream
+        .write_all(
+            br#"{"version":1,"type":"notify","caller":"hermes","channel":"telegram_myriad","severity":"critical","title":"disk full","message":"/var is 95%"}"#,
+        )
+        .expect("request writes");
+    stream.write_all(b"\n").expect("request newline writes");
+
+    let mut response = String::new();
+    BufReader::new(stream)
+        .read_line(&mut response)
+        .expect("response reads");
+
+    let status = agentd.wait().expect("agentd exits");
+    assert!(status.success());
+    assert!(response.contains(r#""status":"ok""#));
+    assert!(response.contains(r#""version":1"#));
+
+    let request = fs::read_to_string(&record_path).expect("notification recorded");
+    assert!(request.contains("channel=telegram_myriad"));
+    assert!(request.contains("url=https://telegram.test/bottelegram-token/sendMessage"));
+    assert!(request.contains(r#""chat_id":"123456789""#));
+    assert!(request.contains(r#""text":"[critical] disk full\ncaller: hermes\n/var is 95%""#));
+
+    fs::remove_dir_all(config_dir).expect("config dir removed");
+}
+
+#[test]
+fn serve_once_sends_discord_notification_over_uds() {
+    let config_dir = unique_temp_dir("agentd-notify-test");
+    fs::create_dir(&config_dir).expect("config dir created");
+    let config_path = write_config(&config_dir, "https://api.github.com");
+    let socket_path = config_dir.join("agentd.sock");
+    let record_path = config_dir.join("notification.record");
+
+    let mut agentd = std::process::Command::new(assert_cmd::cargo::cargo_bin("agentd"))
+        .args([
+            "serve",
+            "--once",
+            "--config-path",
+            config_path.to_str().expect("utf-8 config path"),
+            "--socket-path",
+            socket_path.to_str().expect("utf-8 socket path"),
+        ])
+        .env("AGENTD_TEST_OVERRIDES", "1")
+        .env("AGENTD_NOTIFICATION_RECORD_PATH", &record_path)
+        .env(
+            "AGENTD_TEST_DISCORD_WEBHOOK",
+            "https://discord.test/webhook",
+        )
+        .spawn()
+        .expect("agentd starts");
+
+    wait_for_socket(&socket_path);
+    let mut stream = UnixStream::connect(&socket_path).expect("client connects");
+    stream
+        .write_all(
+            br#"{"version":1,"type":"notify","caller":"hermes","channel":"discord_myriad","severity":"warning","title":null,"message":"service degraded"}"#,
+        )
+        .expect("request writes");
+    stream.write_all(b"\n").expect("request newline writes");
+
+    let mut response = String::new();
+    BufReader::new(stream)
+        .read_line(&mut response)
+        .expect("response reads");
+
+    let status = agentd.wait().expect("agentd exits");
+    assert!(status.success());
+    assert!(response.contains(r#""status":"ok""#));
+    assert!(response.contains(r#""version":1"#));
+
+    let request = fs::read_to_string(&record_path).expect("notification recorded");
+    assert!(request.contains("channel=discord_myriad"));
+    assert!(request.contains("url=https://discord.test/webhook"));
+    assert!(request
+        .contains(r#""content":"[warning] agentctl notify\ncaller: hermes\nservice degraded""#));
+
+    fs::remove_dir_all(config_dir).expect("config dir removed");
+}
+
 fn github_token_response_server() -> (String, thread::JoinHandle<String>) {
     let listener = TcpListener::bind("127.0.0.1:0").expect("test server binds");
     let address = listener.local_addr().expect("test server address");
@@ -175,7 +281,7 @@ fn write_config(config_dir: &std::path::Path, api_url: &str) -> std::path::PathB
     fs::write(
         &config_path,
         format!(
-            "[github_app]\napi_url = \"{api_url}\"\ndefault_profile = \"default\"\n\n[github_app.profiles.default]\napp_id = 1\ninstallation_id = 42\nrepos = [\"OWNER/REPO\"]\n\n[github_app.profiles.default.private_key]\ntype = \"file\"\npath = \"{}\"\n\n[github_app.profiles.default.permissions]\ncontents = \"read\"\n",
+            "[github_app]\napi_url = \"{api_url}\"\ndefault_profile = \"default\"\n\n[github_app.profiles.default]\napp_id = 1\ninstallation_id = 42\nrepos = [\"OWNER/REPO\"]\n\n[github_app.profiles.default.private_key]\ntype = \"file\"\npath = \"{}\"\n\n[github_app.profiles.default.permissions]\ncontents = \"read\"\n\n[notification.channels.telegram_myriad]\ntype = \"telegram\"\nallowed_callers = [\"hermes\"]\nchat_id = \"123456789\"\nbot_token_env = \"AGENTD_TEST_TELEGRAM_TOKEN\"\n\n[notification.channels.discord_myriad]\ntype = \"discord\"\nallowed_callers = [\"hermes\"]\nwebhook_url_env = \"AGENTD_TEST_DISCORD_WEBHOOK\"\n",
             private_key_path.to_string_lossy()
         ),
     )

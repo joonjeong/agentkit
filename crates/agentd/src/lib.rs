@@ -1,5 +1,6 @@
 mod config;
 mod github;
+mod notification;
 mod protocol;
 mod server;
 
@@ -103,6 +104,9 @@ fn config(args: ConfigArgs) -> Result<()> {
                 if let Some(default_profile) = github_app.default_profile {
                     println!("default_profile: {default_profile}");
                 }
+            }
+            if let Some(notification) = config.notification {
+                println!("notification channels: {}", notification.channels.len());
             }
             Ok(())
         }

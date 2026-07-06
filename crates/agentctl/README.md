@@ -26,9 +26,10 @@ The binary never exposes `exec`, `shell`, raw `systemctl`, raw `apt`, or
 rejects direct root execution, validates the target name, checks the caller's
 allowlist, writes `/var/log/agentctl/audit.log`, and then executes a fixed
 service-manager command path without going through a shell. It can also send
-allowlisted notifications to Telegram or Discord without exposing provider
-credentials to the caller. The default backend is `systemd`; Alpine/OpenRC
-service control can be enabled with `backend = "openrc"` in the config defaults.
+allowlisted notifications by delegating to `agentd` over a Unix domain socket,
+without exposing provider credentials to the caller. The default backend is
+`systemd`; Alpine/OpenRC service control can be enabled with `backend = "openrc"`
+in the config defaults.
 
 Build:
 

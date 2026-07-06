@@ -7,6 +7,7 @@ use anyhow::{Context, Result};
 
 use crate::config::AgentdConfigFile;
 use crate::github;
+use crate::notification::{self, Notification};
 use crate::protocol::{WireRequest, WireResponse};
 
 pub(crate) fn serve(config: AgentdConfigFile, socket_path: &Path, once: bool) -> Result<()> {
@@ -75,11 +76,45 @@ fn handle_request(request: WireRequest, config: &AgentdConfigFile) -> Result<Wir
         } => {
             WireRequest::validate_version(version)?;
             let token = github::installation_token(config, profile.as_deref(), repos, permissions)?;
-            Ok(WireResponse::ok(
+            Ok(WireResponse::github_token(
                 token.token,
                 token.expires_at,
                 token.api_url,
             ))
+        }
+        WireRequest::Notify {
+            version,
+            caller,
+            channel,
+            severity,
+            title,
+            message,
+        } => {
+            WireRequest::validate_version(version)?;
+            let notification_config = config
+                .notification
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("notification is not configured"))?;
+            let configured_channel = notification_config
+                .channels
+                .get(&channel)
+                .ok_or_else(|| anyhow::anyhow!("notification channel not found: {channel}"))?;
+            if !notification::caller_is_allowed(configured_channel, &caller) {
+                return Err(anyhow::anyhow!(
+                    "caller {caller:?} is not allowed to use notification channel {channel:?}"
+                ));
+            }
+            notification::send(
+                configured_channel,
+                &Notification {
+                    caller: &caller,
+                    channel: &channel,
+                    severity,
+                    title: title.as_deref(),
+                    message: &message,
+                },
+            )?;
+            Ok(WireResponse::ok())
         }
     }
 }

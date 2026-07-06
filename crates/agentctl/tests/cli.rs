@@ -1,8 +1,11 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
 use std::fs;
+use std::io::{BufRead, BufReader, Write};
+use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -76,10 +79,7 @@ fn config_explain_dumps_validated_config() {
                 .and(predicate::str::contains("service restart hermes"))
                 .and(predicate::str::contains("service status cloudflared"))
                 .and(predicate::str::contains("logs tailscale"))
-                .and(predicate::str::contains(
-                    "    notify: [\"telegram_myriad\", \"discord_myriad\"]",
-                ))
-                .and(predicate::str::contains("notify telegram_myriad")),
+                .and(predicate::str::contains("notify telegram_myriad").not()),
         );
 
     fs::remove_dir_all(temp).expect("temporary directory removed");
@@ -246,7 +246,8 @@ fn notify_posts_to_allowlisted_telegram_channel() {
     let temp = temp_dir("agentctl-notify-telegram");
     let config = write_config(&temp, TELEGRAM_NOTIFY_CONFIG);
     let audit = temp.join("audit.log");
-    let record = temp.join("notification.record");
+    let socket_path = short_socket_path("agentctl-telegram");
+    let agentd = agentd_notify_response_server(&socket_path, r#"{"status":"ok","version":1}"#);
 
     Command::cargo_bin("agentctl")
         .expect("binary exists")
@@ -259,29 +260,34 @@ fn notify_posts_to_allowlisted_telegram_channel() {
             "disk full",
             "--message",
             "/var is 95%",
+            "--agentd-socket",
+            socket_path.to_str().expect("utf-8 socket path"),
         ])
         .env("AGENTCTL_TEST_OVERRIDES", "1")
         .env("AGENTCTL_CONFIG_PATH", &config)
         .env("AGENTCTL_AUDIT_LOG", &audit)
-        .env("AGENTCTL_TELEGRAM_API_BASE", "https://telegram.test")
-        .env("AGENTCTL_NOTIFICATION_RECORD_PATH", &record)
-        .env("AGENTCTL_TEST_TELEGRAM_TOKEN", "telegram-token")
         .env("SUDO_USER", "hermes")
         .assert()
         .success();
 
-    let request = fs::read_to_string(record).expect("notification recorded");
-    assert!(request.contains("channel=telegram_myriad"));
-    assert!(request.contains("url=https://telegram.test/bottelegram-token/sendMessage"));
-    assert!(request.contains(r#""chat_id":"123456789""#));
-    assert!(request.contains(r#""text":"[critical] disk full\ncaller: hermes\n/var is 95%""#));
+    let request = agentd.join().expect("agentd request captured");
+    assert!(request.contains(r#""type":"notify""#));
+    assert!(request.contains(r#""version":1"#));
+    assert!(request.contains(r#""caller":"hermes""#));
+    assert!(request.contains(r#""channel":"telegram_myriad""#));
+    assert!(request.contains(r#""severity":"critical""#));
+    assert!(request.contains(r#""title":"disk full""#));
+    assert!(request.contains(r#""message":"/var is 95%""#));
 
     let audit_log = fs::read_to_string(audit).expect("audit log");
-    assert!(audit_log.contains("caller=hermes action=notify target=telegram_myriad result=allow"));
+    assert!(audit_log.contains(
+        "caller=hermes action=notify target=telegram_myriad result=delegate reason=agentd"
+    ));
     assert!(audit_log.contains(
         "caller=hermes action=notify target=telegram_myriad result=executed reason=sent"
     ));
 
+    fs::remove_file(socket_path).expect("socket removed");
     fs::remove_dir_all(temp).expect("temporary directory removed");
 }
 
@@ -297,16 +303,13 @@ version = 1
 backend = "systemd"
 max_log_lines = 1000
 
-[channels.discord_myriad]
-type = "discord"
-webhook_url_env = "AGENTCTL_TEST_DISCORD_WEBHOOK"
-
 [callers.hermes]
-notify = ["discord_myriad"]
+service_read = ["hermes"]
 "#,
     );
     let audit = temp.join("audit.log");
-    let record = temp.join("notification.record");
+    let socket_path = short_socket_path("agentctl-discord");
+    let agentd = agentd_notify_response_server(&socket_path, r#"{"status":"ok","version":1}"#);
 
     Command::cargo_bin("agentctl")
         .expect("binary exists")
@@ -317,52 +320,65 @@ notify = ["discord_myriad"]
             "warning",
             "--message",
             "service degraded",
+            "--agentd-socket",
+            socket_path.to_str().expect("utf-8 socket path"),
         ])
         .env("AGENTCTL_TEST_OVERRIDES", "1")
         .env("AGENTCTL_CONFIG_PATH", &config)
         .env("AGENTCTL_AUDIT_LOG", &audit)
-        .env("AGENTCTL_NOTIFICATION_RECORD_PATH", &record)
-        .env(
-            "AGENTCTL_TEST_DISCORD_WEBHOOK",
-            "https://discord.test/webhook",
-        )
         .env("SUDO_USER", "hermes")
         .assert()
         .success();
 
-    let request = fs::read_to_string(record).expect("notification recorded");
-    assert!(request.contains("channel=discord_myriad"));
-    assert!(request.contains("url=https://discord.test/webhook"));
-    assert!(request
-        .contains(r#""content":"[warning] agentctl notify\ncaller: hermes\nservice degraded""#));
+    let request = agentd.join().expect("agentd request captured");
+    assert!(request.contains(r#""type":"notify""#));
+    assert!(request.contains(r#""caller":"hermes""#));
+    assert!(request.contains(r#""channel":"discord_myriad""#));
+    assert!(request.contains(r#""severity":"warning""#));
+    assert!(request.contains(r#""message":"service degraded""#));
 
+    fs::remove_file(socket_path).expect("socket removed");
     fs::remove_dir_all(temp).expect("temporary directory removed");
 }
 
 #[test]
-fn notify_rejects_unallowlisted_channel_without_posting() {
+fn notify_reports_agentd_rejection() {
     let temp = temp_dir("agentctl-notify-denied");
     let config = write_config(&temp, TELEGRAM_NOTIFY_CONFIG);
     let audit = temp.join("audit.log");
+    let socket_path = short_socket_path("agentctl-denied");
+    let agentd = agentd_notify_response_server(
+        &socket_path,
+        r#"{"status":"error","version":1,"error":"caller \"hermes\" is not allowed to use notification channel \"telegram_other\""}"#,
+    );
 
     Command::cargo_bin("agentctl")
         .expect("binary exists")
-        .args(["notify", "telegram_other", "--message", "should not send"])
+        .args([
+            "notify",
+            "telegram_other",
+            "--message",
+            "should not send",
+            "--agentd-socket",
+            socket_path.to_str().expect("utf-8 socket path"),
+        ])
         .env("AGENTCTL_TEST_OVERRIDES", "1")
         .env("AGENTCTL_CONFIG_PATH", &config)
         .env("AGENTCTL_AUDIT_LOG", &audit)
         .env("SUDO_USER", "hermes")
         .assert()
         .failure()
-        .stderr(predicate::str::contains(
-            "notification channel not allowed: telegram_other",
-        ));
+        .stderr(predicate::str::contains("agentd rejected request"));
+
+    let request = agentd.join().expect("agentd request captured");
+    assert!(request.contains(r#""channel":"telegram_other""#));
 
     let audit_log = fs::read_to_string(audit).expect("audit log");
     assert!(audit_log.contains(
-        "caller=hermes action=notify target=telegram_other result=deny reason=channel_not_allowed"
+        "caller=hermes action=notify target=telegram_other result=delegate reason=agentd"
     ));
 
+    fs::remove_file(socket_path).expect("socket removed");
     fs::remove_dir_all(temp).expect("temporary directory removed");
 }
 
@@ -690,10 +706,51 @@ fn temp_dir(prefix: &str) -> PathBuf {
     path
 }
 
+fn short_socket_path(prefix: &str) -> PathBuf {
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system time after unix epoch")
+        .as_nanos();
+    let count = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+    std::path::PathBuf::from("/tmp").join(format!(
+        "{prefix}-{}-{nonce}-{count}.sock",
+        std::process::id()
+    ))
+}
+
 fn write_config(dir: &Path, contents: &str) -> PathBuf {
     let path = dir.join("config.toml");
     fs::write(&path, contents).expect("config written");
     path
+}
+
+fn agentd_notify_response_server(
+    socket_path: &Path,
+    response: &'static str,
+) -> thread::JoinHandle<String> {
+    let socket_path = socket_path.to_owned();
+    let wait_path = socket_path.clone();
+    let response = response.to_owned();
+    let handle = thread::spawn(move || {
+        let listener = UnixListener::bind(&socket_path).expect("agentd socket binds");
+        let (mut stream, _) = listener.accept().expect("agentctl connects");
+        let mut request = String::new();
+        BufReader::new(stream.try_clone().expect("stream clones"))
+            .read_line(&mut request)
+            .expect("request reads");
+        stream
+            .write_all(response.as_bytes())
+            .expect("response writes");
+        stream.write_all(b"\n").expect("response newline writes");
+        request
+    });
+    for _ in 0..100 {
+        if wait_path.exists() {
+            return handle;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    panic!("agentd socket was not created");
 }
 
 #[cfg(unix)]
@@ -734,11 +791,6 @@ version = 1
 backend = "systemd"
 max_log_lines = 1000
 
-[channels.telegram_myriad]
-type = "telegram"
-chat_id = "123456789"
-bot_token_env = "AGENTCTL_TEST_TELEGRAM_TOKEN"
-
 [callers.hermes]
-notify = ["telegram_myriad"]
+service_read = ["hermes"]
 "#;
