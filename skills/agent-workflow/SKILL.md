@@ -1,9 +1,9 @@
 ---
-name: agent-session-workflow
+name: agent-workflow
 description: Run agent commands through agent-session provider sessions so app-auth credentials stay scoped to the child process.
 ---
 
-# Agent Session Workflow
+# Agent Workflow
 
 Use this skill when an agent needs temporary provider credentials for a command
 without exporting long-lived secrets into the parent shell. `agent-session` is a
@@ -16,7 +16,6 @@ The current provider is GitHub App authentication:
 ```sh
 agent-session github-app run [OPTIONS] -- COMMAND [ARG]...
 agentd config check --config-path /etc/agentd/config.toml
-agent-session agent-skill --install-path /path/to/skills
 ```
 
 Future providers should follow the same boundary: provider credentials come from

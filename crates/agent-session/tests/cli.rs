@@ -21,7 +21,6 @@ fn shows_top_level_help() {
     cmd.arg("--help").assert().success().stdout(
         predicate::str::contains("github-app")
             .and(predicate::str::contains("agent-session"))
-            .and(predicate::str::contains("agent-skill"))
             .and(predicate::str::contains(
                 "agent-session github-app run [OPTIONS]",
             )),
@@ -48,11 +47,9 @@ fn shows_agent_session_agent_usage() {
     let mut cmd = Command::cargo_bin("agent-session").expect("binary exists");
 
     cmd.arg("--help").assert().success().stdout(
-        predicate::str::contains("Run a command in an authenticated operations session")
-            .and(predicate::str::contains(
-                "agent-session github-app run [OPTIONS]",
-            ))
-            .and(predicate::str::contains("agent-skill")),
+        predicate::str::contains("Run a command in an authenticated operations session").and(
+            predicate::str::contains("agent-session github-app run [OPTIONS]"),
+        ),
     );
 
     let mut github = Command::cargo_bin("agent-session").expect("binary exists");
@@ -348,65 +345,6 @@ fn agent_session_accepts_command_options_after_separator() {
         .assert()
         .failure();
     }
-}
-
-#[test]
-fn creates_github_app_agent_workflow_skill() {
-    let mut cmd = Command::cargo_bin("agent-session").expect("binary exists");
-    let skills_dir = unique_temp_dir("agent-session-skill-test");
-
-    cmd.args([
-        "agent-skill",
-        "--install-path",
-        skills_dir.to_str().expect("utf-8 path"),
-    ])
-    .assert()
-    .success()
-    .stdout(predicate::str::contains("agent-session-workflow"));
-
-    let skill_file = skills_dir.join("agent-session-workflow").join("SKILL.md");
-    let skill = fs::read_to_string(&skill_file).expect("skill file exists");
-    assert!(skill.contains("name: agent-session-workflow"));
-    assert!(skill.contains("agent-session github-app run"));
-    assert!(skill.contains("agentd config check"));
-    assert!(skill.contains("provider-scoped session runner"));
-    assert!(skill.contains("/etc/agentd/config.toml"));
-    assert!(skill.contains("AGENT_SESSION_GITHUB_PROFILE"));
-
-    fs::remove_dir_all(skills_dir).expect("temporary skill directory removed");
-}
-
-#[test]
-fn refuses_to_overwrite_existing_skill_without_force() {
-    let skills_dir = unique_temp_dir("agent-session-skill-test");
-
-    let mut create = Command::cargo_bin("agent-session").expect("binary exists");
-    create
-        .args([
-            "agent-skill",
-            "-i",
-            skills_dir.to_str().expect("utf-8 path"),
-        ])
-        .assert()
-        .success();
-
-    assert!(skills_dir
-        .join("agent-session-workflow")
-        .join("SKILL.md")
-        .exists());
-
-    let mut overwrite = Command::cargo_bin("agent-session").expect("binary exists");
-    overwrite
-        .args([
-            "agent-skill",
-            "-i",
-            skills_dir.to_str().expect("utf-8 path"),
-        ])
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains("already exists"));
-
-    fs::remove_dir_all(skills_dir).expect("temporary skill directory removed");
 }
 
 fn unique_temp_dir(prefix: &str) -> std::path::PathBuf {

@@ -12,9 +12,6 @@ use clap::{Args, Subcommand};
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 
-const AGENT_SESSION_WORKFLOW_SKILL_NAME: &str = "agent-session-workflow";
-const AGENT_SESSION_WORKFLOW_SKILL: &str =
-    include_str!("../resources/skills/agent-session-workflow/SKILL.md");
 const DEFAULT_AGENTD_SOCKET_PATH: &str = "/run/agentd/agentd.sock";
 const AGENTD_WIRE_PROTOCOL_VERSION: u32 = 1;
 
@@ -111,31 +108,6 @@ pub struct GithubSessionArgs {
         allow_hyphen_values = true
     )]
     command: Vec<OsString>,
-}
-
-#[derive(Debug, Args)]
-#[command(
-    about = "Create the agent-session agent workflow skill",
-    long_about = "Create the bundled agent-session-workflow skill under a target skills directory.
-
-The command writes INSTALL_PATH/agent-session-workflow/SKILL.md. Use it to install the agent-facing workflow guidance next to Codex, Hermes, or another agent's skill directory without copying files manually.",
-    after_long_help = "Examples:
-  agent-session agent-skill --install-path ~/.codex/skills
-  agent-session agent-skill -i ./skills --force
-
-Output:
-  Prints the created skill directory path."
-)]
-pub struct AppAgentWorkflowSkillArgs {
-    /// Directory where the skill folder should be created.
-    ///
-    /// The command creates <INSTALL_PATH>/agent-session-workflow/SKILL.md.
-    #[arg(long, short = 'i', value_name = "INSTALL_PATH")]
-    install_path: PathBuf,
-
-    /// Overwrite an existing SKILL.md.
-    #[arg(long)]
-    force: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -241,26 +213,6 @@ fn validate_agentd_wire_version(version: u32) -> Result<()> {
             "unsupported agentd wire protocol version {version}; expected {AGENTD_WIRE_PROTOCOL_VERSION}"
         ));
     }
-    Ok(())
-}
-
-pub fn create_app_agent_workflow_skill(args: AppAgentWorkflowSkillArgs) -> Result<()> {
-    let skill_dir = args.install_path.join(AGENT_SESSION_WORKFLOW_SKILL_NAME);
-    let skill_file = skill_dir.join("SKILL.md");
-
-    if skill_file.exists() && !args.force {
-        return Err(anyhow!(
-            "{} already exists; pass --force to overwrite it",
-            skill_file.display()
-        ));
-    }
-
-    fs::create_dir_all(&skill_dir)
-        .with_context(|| format!("failed to create {}", skill_dir.display()))?;
-    fs::write(&skill_file, AGENT_SESSION_WORKFLOW_SKILL)
-        .with_context(|| format!("failed to write {}", skill_file.display()))?;
-
-    println!("{}", skill_dir.display());
     Ok(())
 }
 

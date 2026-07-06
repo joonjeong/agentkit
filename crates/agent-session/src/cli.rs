@@ -17,7 +17,6 @@ const VERSION: &str = match option_env!("AGENT_SESSION_VERSION") {
 #[command(about = "Run a command in an authenticated operations session")]
 #[command(after_long_help = "Invocation forms:
   agent-session github-app run [OPTIONS] -- COMMAND [ARG]...
-  agent-session agent-skill --install-path DIR
 
 For now, GitHub App authentication is the only supported session provider.")]
 struct OpsSessionCli {
@@ -30,8 +29,6 @@ enum Command {
     /// GitHub App-backed operations session commands.
     #[command(name = "github-app")]
     GithubApp(github::GithubAppArgs),
-    /// Create the agent-session agent workflow skill.
-    AgentSkill(github::AppAgentWorkflowSkillArgs),
 }
 
 pub fn run<I, T>(args: I) -> Result<()>
@@ -57,6 +54,5 @@ where
     let cli = OpsSessionCli::parse_from(args);
     match cli.command {
         Command::GithubApp(args) => github::github_app(args),
-        Command::AgentSkill(args) => github::create_app_agent_workflow_skill(args),
     }
 }
