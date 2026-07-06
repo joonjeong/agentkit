@@ -15,8 +15,6 @@ pub(crate) struct AgentdConfigFile {
 #[derive(Debug, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct GithubConfigFile {
-    pub(crate) app_id: Option<u64>,
-    pub(crate) installation_id: Option<u64>,
     pub(crate) api_url: Option<String>,
     pub(crate) default_profile: Option<String>,
     #[serde(default)]
@@ -91,9 +89,9 @@ pub(crate) fn validate(config: &AgentdConfigFile, path: &Path) -> Result<()> {
                 path.display()
             ));
         }
-        if github_app.app_id.is_none() && profile.app_id.is_none() {
+        if profile.app_id.is_none() {
             return Err(anyhow!(
-                "profile {name:?} must resolve app_id in {}",
+                "profile {name:?} must define app_id in {}",
                 path.display()
             ));
         }

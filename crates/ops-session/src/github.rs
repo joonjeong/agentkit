@@ -57,7 +57,7 @@ Environment:
   OPS_SESSION_GITHUB_PROFILE
 
 Repository scoping:
-  Use --profile NAME or OPS_SESSION_GITHUB_PROFILE to select the agentd GitHub App profile. Use --repo OWNER/REPO to request a subset of the selected profile's repository list. Repeat --repo for multiple repositories. agentd validates requested repositories and permissions against its system-wide profile before minting a token.
+  Set OPS_SESSION_GITHUB_PROFILE as the default profile selector for agent services. Use --profile NAME only for one-off overrides. Use --repo OWNER/REPO to request a subset of the selected profile's repository list. Repeat --repo for multiple repositories. agentd validates requested repositories and permissions against its system-wide profile before minting a token.
 
 Execution:
   The command after -- is run directly with GH_TOKEN and GITHUB_TOKEN set to the temporary installation token. GitHub App credential environment variables are removed from the child environment. The child process inherits stdin, stdout, stderr, working directory, PATH, and other ordinary environment variables. Shell syntax such as pipes, redirects, aliases, and shell functions requires an explicit shell command, for example -- sh -c 'gh issue view 123 | jq .url'.
@@ -74,10 +74,10 @@ pub struct GithubSessionArgs {
     )]
     agentd_socket: PathBuf,
 
-    /// Named GitHub App profile from agentd.
+    /// One-off GitHub App profile override.
     ///
-    /// Use this when multiple agents on a node need different repository scopes
-    /// or token permissions.
+    /// Prefer OPS_SESSION_GITHUB_PROFILE as the default profile selector for
+    /// long-running agent services.
     #[arg(long, env = "OPS_SESSION_GITHUB_PROFILE")]
     profile: Option<String>,
 

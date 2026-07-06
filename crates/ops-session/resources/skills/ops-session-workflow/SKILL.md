@@ -54,9 +54,11 @@ OPS_SESSION_GITHUB_PROFILE=codex-maintainer \
   -- git remote update
 ```
 
-Profile selection can be configured per invocation:
+Profile selection should normally come from the process environment:
 
-- `--profile NAME` or `OPS_SESSION_GITHUB_PROFILE`
+- `OPS_SESSION_GITHUB_PROFILE`
+
+Use `--profile NAME` only for one-off overrides.
 
 These non-secret values can be requested per invocation. agentd rejects requests
 outside the selected profile's configured scope:

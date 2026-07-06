@@ -39,7 +39,7 @@ fn config_check_rejects_profile_without_allowed_repos() {
     fs::write(
         &config_path,
         format!(
-            "[github_app]\napp_id = 1\n\n[github_app.profiles.default]\nrepos = []\n\n[github_app.profiles.default.private_key]\ntype = \"file\"\npath = \"{}\"\n",
+            "[github_app]\n\n[github_app.profiles.default]\napp_id = 1\nrepos = []\n\n[github_app.profiles.default.private_key]\ntype = \"file\"\npath = \"{}\"\n",
             private_key_path.to_string_lossy()
         ),
     )
@@ -175,7 +175,7 @@ fn write_config(config_dir: &std::path::Path, api_url: &str) -> std::path::PathB
     fs::write(
         &config_path,
         format!(
-            "[github_app]\napp_id = 1\ninstallation_id = 42\napi_url = \"{api_url}\"\ndefault_profile = \"default\"\n\n[github_app.profiles.default]\nrepos = [\"OWNER/REPO\"]\n\n[github_app.profiles.default.private_key]\ntype = \"file\"\npath = \"{}\"\n\n[github_app.profiles.default.permissions]\ncontents = \"read\"\n",
+            "[github_app]\napi_url = \"{api_url}\"\ndefault_profile = \"default\"\n\n[github_app.profiles.default]\napp_id = 1\ninstallation_id = 42\nrepos = [\"OWNER/REPO\"]\n\n[github_app.profiles.default.private_key]\ntype = \"file\"\npath = \"{}\"\n\n[github_app.profiles.default.permissions]\ncontents = \"read\"\n",
             private_key_path.to_string_lossy()
         ),
     )

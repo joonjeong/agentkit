@@ -31,11 +31,11 @@ For now, `agentd` mints GitHub App installation tokens:
 
 ```toml
 [github_app]
-app_id = 123456
 api_url = "https://api.github.com"
 default_profile = "codex-review"
 
 [github_app.profiles.codex-review]
+app_id = 123456
 repos = ["OWNER/REPO"]
 
 [github_app.profiles.codex-review.private_key]

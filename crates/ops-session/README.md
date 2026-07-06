@@ -4,8 +4,8 @@
 from `agentd`. The current provider is GitHub App authentication:
 
 ```sh
+OPS_SESSION_GITHUB_PROFILE=codex-review \
 ops-session github-app run \
-  --profile codex-review \
   -- git remote update
 ```
 
@@ -14,7 +14,8 @@ GitHub credentials and provider profiles are read by `agentd`, not by
 private key sources in `/etc/agentd/config.toml`; see
 [agentd](../agentd/README.md) for the config schema and wire protocol.
 
-`--profile` or `OPS_SESSION_GITHUB_PROFILE` selects the agentd profile.
+`OPS_SESSION_GITHUB_PROFILE` is the default way to select the agentd profile for
+agent services. `--profile` is available for one-off overrides.
 `--repo OWNER/REPO` and `--permission key=value` request a subset of that
 profile's configured scope. `agentd` rejects requests outside the profile
 instead of letting `ops-session` override system configuration.
@@ -25,8 +26,8 @@ injected as both `GH_TOKEN` and `GITHUB_TOKEN`.
 
 Useful options:
 
-- `--profile NAME` selects a named agentd profile. Prefer
-  `OPS_SESSION_GITHUB_PROFILE` for long-running agent services.
+- `OPS_SESSION_GITHUB_PROFILE` selects the default agentd profile for the
+  process. Use `--profile NAME` only for one-off overrides.
 - `--git-credentials` configures a child-only Git credential helper for HTTPS
   GitHub remotes.
 - `--repo OWNER/REPO` and `--permission key=value` can override profile
@@ -36,6 +37,15 @@ Shell syntax such as pipes, redirects, aliases, and shell functions requires an
 explicit shell command:
 
 ```sh
+ops-session github-app run \
+  --repo OWNER/REPO \
+  -- sh -c 'gh issue view 123 | jq .url'
+```
+
+or with a service-level profile:
+
+```sh
+OPS_SESSION_GITHUB_PROFILE=codex-review \
 ops-session github-app run \
   --repo OWNER/REPO \
   -- sh -c 'gh issue view 123 | jq .url'

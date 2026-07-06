@@ -1,5 +1,4 @@
 [github_app]
-app_id = 123456
 api_url = "https://api.github.com"
 default_profile = "codex-review"
 
@@ -9,6 +8,7 @@ default_profile = "codex-review"
 # that group.
 
 [github_app.profiles.codex-review]
+app_id = 123456
 repos = ["OWNER/REPO"]
 
 [github_app.profiles.codex-review.private_key]
@@ -21,6 +21,7 @@ pull_requests = "read"
 issues = "read"
 
 [github_app.profiles.codex-maintainer]
+app_id = 123456
 repos = ["OWNER/REPO"]
 
 [github_app.profiles.codex-maintainer.private_key]
@@ -33,6 +34,7 @@ pull_requests = "write"
 issues = "write"
 
 [github_app.profiles.hermes-release]
+app_id = 654321
 repos = ["OWNER/RELEASE-REPO", "OWNER/INFRA-REPO"]
 installation_id = 987654
 

@@ -123,9 +123,8 @@ fn resolve_github_profile(
     Ok(ResolvedGithubProfile {
         app_id: profile
             .app_id
-            .or(github_app.app_id)
-            .ok_or_else(|| anyhow!("profile {profile_name:?} must resolve app_id"))?,
-        installation_id: profile.installation_id.or(github_app.installation_id),
+            .ok_or_else(|| anyhow!("profile {profile_name:?} must define app_id"))?,
+        installation_id: profile.installation_id,
         private_key: profile.private_key.clone(),
         api_url: profile
             .api_url
