@@ -12,11 +12,14 @@ use crate::notification::{self, Notification, Severity};
 use crate::policy::{is_allowed, validate_target, Action};
 use crate::runner;
 
-const VERSION: &str = env!("CARGO_PKG_VERSION");
+const VERSION: &str = match option_env!("AGENTCTL_VERSION") {
+    Some(version) => version,
+    None => env!("CARGO_PKG_VERSION"),
+};
 const DEFAULT_LOG_LINES: u32 = 200;
 
 #[derive(Debug, Parser)]
-#[command(name = "ops-runbook")]
+#[command(name = "agentctl")]
 #[command(version = VERSION)]
 #[command(about = "Config-driven restricted executor for homelab operations")]
 struct Cli {
@@ -36,7 +39,7 @@ enum Command {
     Notify(NotifyArgs),
     /// Validate or inspect config.
     Config(ConfigCommand),
-    /// Print the ops-runbook version.
+    /// Print the agentctl version.
     Version,
 }
 
@@ -109,7 +112,7 @@ enum ConfigSubcommand {
 #[derive(Debug, Args)]
 struct ConfigArgs {
     /// Config file to read.
-    #[arg(long, env = "OPS_RUNBOOK_CONFIG_PATH")]
+    #[arg(long, env = "AGENTCTL_CONFIG_PATH")]
     config_path: Option<PathBuf>,
 }
 
@@ -135,7 +138,7 @@ where
 {
     let mut args: Vec<OsString> = args.into_iter().map(Into::into).collect();
     if args.is_empty() {
-        args.push(OsString::from("ops-runbook"));
+        args.push(OsString::from("agentctl"));
     }
 
     let cli = Cli::parse_from(args);
@@ -172,7 +175,7 @@ where
             ConfigSubcommand::Template(args) => template_config(args),
         },
         Command::Version => {
-            println!("ops-runbook {VERSION}");
+            println!("agentctl {VERSION}");
             Ok(0)
         }
     }

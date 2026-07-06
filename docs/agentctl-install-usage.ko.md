@@ -1,6 +1,6 @@
-# ops-runbook 설치 및 사용법
+# agentctl 설치 및 사용법
 
-`ops-runbook`은 홈랩 운영 작업을 위한 config 기반 제한 실행기입니다.
+`agentctl`은 홈랩 운영 작업을 위한 config 기반 제한 실행기입니다.
 자동화 에이전트가 sudo를 통해 제한된 root 작업만 실행하게 하며, raw shell,
 `systemctl`, `apt`, Docker socket, Ansible 접근 권한은 주지 않습니다.
 
@@ -14,35 +14,35 @@
 신뢰할 수 있는 관리자가 다음 명령을 실행합니다.
 
 ```sh
-sudo ./ops-runbook bootstrap --user hermes
+sudo ./agentctl bootstrap --user hermes
 ```
 
 `bootstrap`은 대상 호스트를 구성합니다.
 
-- 현재 바이너리를 `/usr/local/sbin/ops-runbook`에 설치
+- 현재 바이너리를 `/usr/local/sbin/agentctl`에 설치
 - `ops-agent` 시스템 그룹이 없으면 생성
 - `--user`로 지정한 기존 계정을 `ops-agent` 그룹에 추가
-- `/etc/ops-runbook/config.toml`이 없으면 기본 config 생성
+- `/etc/agentctl/config.toml`이 없으면 기본 config 생성
 - `/etc/sudoers.d/ops-agent` 생성
-- `/var/log/ops-runbook` 아래 로그 경로 생성
-- `/etc/logrotate.d/ops-runbook` 생성
+- `/var/log/agentctl` 아래 로그 경로 생성
+- `/etc/logrotate.d/agentctl` 생성
 
 생성되는 sudoers 규칙은 `ops-agent` 멤버에게 운영 서브커맨드만 허용합니다.
 에이전트가 `bootstrap`을 실행할 수는 없습니다. 이 규칙은
-`crates/ops-runbook/resources/templates/sudoers.ops-agent.template`에서 렌더링됩니다.
+`crates/agentctl/resources/templates/sudoers.ops-agent.template`에서 렌더링됩니다.
 
 ## 빌드
 
 저장소 루트에서 실행합니다.
 
 ```sh
-cargo build --release --bin ops-runbook
+cargo build --release --bin agentctl
 ```
 
 바이너리는 다음 위치에 생성됩니다.
 
 ```text
-target/release/ops-runbook
+target/release/agentctl
 ```
 
 ## Bootstrap
@@ -50,22 +50,22 @@ target/release/ops-runbook
 바이너리를 대상 호스트에 복사하거나 다운로드한 뒤 실행합니다.
 
 ```sh
-sudo ./ops-runbook bootstrap --user hermes
+sudo ./agentctl bootstrap --user hermes
 ```
 
 주요 옵션:
 
 ```sh
-sudo ./ops-runbook bootstrap \
-  --source-binary /path/to/ops-runbook \
-  --binary-path /usr/local/sbin/ops-runbook \
+sudo ./agentctl bootstrap \
+  --source-binary /path/to/agentctl \
+  --binary-path /usr/local/sbin/agentctl \
   --backend systemd \
   --group ops-agent \
   --sudoers-path /etc/sudoers.d/ops-agent \
-  --config-path /etc/ops-runbook/config.toml \
-  --audit-log-path /var/log/ops-runbook/audit.log \
-  --sudo-log-path /var/log/ops-runbook/sudo.log \
-  --logrotate-path /etc/logrotate.d/ops-runbook
+  --config-path /etc/agentctl/config.toml \
+  --audit-log-path /var/log/agentctl/audit.log \
+  --sudo-log-path /var/log/agentctl/sudo.log \
+  --logrotate-path /etc/logrotate.d/agentctl
 ```
 
 기존 config 파일을 샘플 config로 교체하려면 `--force-config`를 사용합니다.
@@ -85,11 +85,11 @@ max_log_lines = 1000
 [channels.telegram_myriad]
 type = "telegram"
 chat_id = "123456789"
-bot_token_file = "/etc/ops-runbook/secrets/telegram-bot-token"
+bot_token_file = "/etc/agentctl/secrets/telegram-bot-token"
 
 [channels.discord_myriad]
 type = "discord"
-webhook_url_file = "/etc/ops-runbook/secrets/discord-webhook-url"
+webhook_url_file = "/etc/agentctl/secrets/discord-webhook-url"
 
 [callers.hermes]
 # service start, stop, restart, reload 허용
@@ -105,10 +105,10 @@ notify = ["telegram_myriad", "discord_myriad"]
 호출자는 `SUDO_USER`에서 읽습니다. 예를 들어 `hermes`가 다음을 실행하면:
 
 ```sh
-sudo /usr/local/sbin/ops-runbook service restart hermes
+sudo /usr/local/sbin/agentctl service restart hermes
 ```
 
-`ops-runbook`은 `callers.hermes.service_control`에 `hermes`가 있는지 확인합니다.
+`agentctl`은 `callers.hermes.service_control`에 `hermes`가 있는지 확인합니다.
 
 Alpine/OpenRC 호스트에서는 다음처럼 설정합니다.
 
@@ -128,19 +128,19 @@ max_log_lines = 1000
 허용되는 운영 명령:
 
 ```sh
-sudo /usr/local/sbin/ops-runbook service restart hermes
-sudo /usr/local/sbin/ops-runbook service start cloudflared
-sudo /usr/local/sbin/ops-runbook service stop tailscale
-sudo /usr/local/sbin/ops-runbook service reload cloudflared
-sudo /usr/local/sbin/ops-runbook service status cloudflared
-sudo /usr/local/sbin/ops-runbook logs hermes --lines 200 # systemd only
-sudo /usr/local/sbin/ops-runbook notify telegram_myriad --severity critical --message "disk full"
-sudo /usr/local/sbin/ops-runbook notify discord_myriad --title "Hermes" --message "service degraded"
-sudo /usr/local/sbin/ops-runbook config check
-sudo /usr/local/sbin/ops-runbook config explain
-sudo /usr/local/sbin/ops-runbook config explain --config-path ./config.toml
-ops-runbook config template --backend openrc --output ./config.toml
-sudo /usr/local/sbin/ops-runbook version
+sudo /usr/local/sbin/agentctl service restart hermes
+sudo /usr/local/sbin/agentctl service start cloudflared
+sudo /usr/local/sbin/agentctl service stop tailscale
+sudo /usr/local/sbin/agentctl service reload cloudflared
+sudo /usr/local/sbin/agentctl service status cloudflared
+sudo /usr/local/sbin/agentctl logs hermes --lines 200 # systemd only
+sudo /usr/local/sbin/agentctl notify telegram_myriad --severity critical --message "disk full"
+sudo /usr/local/sbin/agentctl notify discord_myriad --title "Hermes" --message "service degraded"
+sudo /usr/local/sbin/agentctl config check
+sudo /usr/local/sbin/agentctl config explain
+sudo /usr/local/sbin/agentctl config explain --config-path ./config.toml
+agentctl config template --backend openrc --output ./config.toml
+sudo /usr/local/sbin/agentctl version
 ```
 
 다음 계열의 명령은 의도적으로 제공하지 않습니다.
@@ -161,27 +161,27 @@ Discord 채널은 `webhook_url_file` 또는 `webhook_url_env`가 필요합니다
 config를 검증합니다.
 
 ```sh
-sudo /usr/local/sbin/ops-runbook config check
-sudo /usr/local/sbin/ops-runbook config check --config-path ./config.toml
+sudo /usr/local/sbin/agentctl config check
+sudo /usr/local/sbin/agentctl config check --config-path ./config.toml
 ```
 
 검증된 config와 caller별 파생 명령을 출력합니다.
 
 ```sh
-sudo /usr/local/sbin/ops-runbook config explain
-OPS_RUNBOOK_CONFIG_PATH=./config.toml ops-runbook config explain
+sudo /usr/local/sbin/agentctl config explain
+AGENTCTL_CONFIG_PATH=./config.toml agentctl config explain
 ```
 
-기본 config 경로는 `/etc/ops-runbook/config.toml`입니다. 다른 파일을
+기본 config 경로는 `/etc/agentctl/config.toml`입니다. 다른 파일을
 확인하려면 `config check`와 `config explain`에서 `--config-path`를
-지정하거나 `OPS_RUNBOOK_CONFIG_PATH` 환경변수를 사용할 수 있습니다.
+지정하거나 `AGENTCTL_CONFIG_PATH` 환경변수를 사용할 수 있습니다.
 
 설정 파일 템플릿은 다음처럼 생성합니다.
 
 ```sh
-ops-runbook config template --backend systemd
-ops-runbook config template --backend openrc --output ./config.toml
-ops-runbook config template --backend openrc --output ./config.toml --force
+agentctl config template --backend systemd
+agentctl config template --backend openrc --output ./config.toml
+agentctl config template --backend openrc --output ./config.toml --force
 ```
 
 `config template`은 관리자 편의 명령이며, 생성되는 sudoers 규칙에는
@@ -190,5 +190,5 @@ ops-runbook config template --backend openrc --output ./config.toml --force
 감사 로그는 다음 파일에 기록됩니다.
 
 ```text
-/var/log/ops-runbook/audit.log
+/var/log/agentctl/audit.log
 ```

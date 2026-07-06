@@ -1,5 +1,5 @@
 fn main() {
-    match ops_runbook::run(std::env::args_os()) {
+    match agentctl::run(std::env::args_os()) {
         Ok(code) => std::process::exit(code),
         Err(error) => {
             eprintln!("error: {error}");

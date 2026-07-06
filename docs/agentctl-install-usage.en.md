@@ -1,6 +1,6 @@
-# ops-runbook Installation and Usage
+# agentctl Installation and Usage
 
-`ops-runbook` is a config-driven restricted executor for homelab operations.
+`agentctl` is a config-driven restricted executor for homelab operations.
 It lets automation agents run a narrow set of root operations through sudo,
 without granting raw shell, `systemctl`, `apt`, Docker socket, or Ansible access.
 
@@ -14,35 +14,35 @@ Supported service-manager backends:
 The trusted administrator runs:
 
 ```sh
-sudo ./ops-runbook bootstrap --user hermes
+sudo ./agentctl bootstrap --user hermes
 ```
 
 `bootstrap` configures the local host:
 
-- installs the current binary to `/usr/local/sbin/ops-runbook`
+- installs the current binary to `/usr/local/sbin/agentctl`
 - creates the `ops-agent` system group when missing
 - adds existing `--user` accounts to `ops-agent`
-- creates `/etc/ops-runbook/config.toml` when missing
+- creates `/etc/agentctl/config.toml` when missing
 - writes `/etc/sudoers.d/ops-agent`
-- creates log paths under `/var/log/ops-runbook`
-- writes `/etc/logrotate.d/ops-runbook`
+- creates log paths under `/var/log/agentctl`
+- writes `/etc/logrotate.d/agentctl`
 
 The generated sudoers rule allows `ops-agent` members to run only the operational
 subcommands. It does not allow agents to run `bootstrap`. The rule is rendered
-from `crates/ops-runbook/resources/templates/sudoers.ops-agent.template`.
+from `crates/agentctl/resources/templates/sudoers.ops-agent.template`.
 
 ## Build
 
 From the repository root:
 
 ```sh
-cargo build --release --bin ops-runbook
+cargo build --release --bin agentctl
 ```
 
 The binary is written to:
 
 ```text
-target/release/ops-runbook
+target/release/agentctl
 ```
 
 ## Bootstrap
@@ -50,22 +50,22 @@ target/release/ops-runbook
 Copy or download the binary to the target host, then run:
 
 ```sh
-sudo ./ops-runbook bootstrap --user hermes
+sudo ./agentctl bootstrap --user hermes
 ```
 
 Useful options:
 
 ```sh
-sudo ./ops-runbook bootstrap \
-  --source-binary /path/to/ops-runbook \
-  --binary-path /usr/local/sbin/ops-runbook \
+sudo ./agentctl bootstrap \
+  --source-binary /path/to/agentctl \
+  --binary-path /usr/local/sbin/agentctl \
   --backend systemd \
   --group ops-agent \
   --sudoers-path /etc/sudoers.d/ops-agent \
-  --config-path /etc/ops-runbook/config.toml \
-  --audit-log-path /var/log/ops-runbook/audit.log \
-  --sudo-log-path /var/log/ops-runbook/sudo.log \
-  --logrotate-path /etc/logrotate.d/ops-runbook
+  --config-path /etc/agentctl/config.toml \
+  --audit-log-path /var/log/agentctl/audit.log \
+  --sudo-log-path /var/log/agentctl/sudo.log \
+  --logrotate-path /etc/logrotate.d/agentctl
 ```
 
 Use `--force-config` to replace an existing config file with the sample config.
@@ -85,11 +85,11 @@ max_log_lines = 1000
 [channels.telegram_myriad]
 type = "telegram"
 chat_id = "123456789"
-bot_token_file = "/etc/ops-runbook/secrets/telegram-bot-token"
+bot_token_file = "/etc/agentctl/secrets/telegram-bot-token"
 
 [channels.discord_myriad]
 type = "discord"
-webhook_url_file = "/etc/ops-runbook/secrets/discord-webhook-url"
+webhook_url_file = "/etc/agentctl/secrets/discord-webhook-url"
 
 [callers.hermes]
 # Allows service start, stop, restart, and reload.
@@ -105,10 +105,10 @@ notify = ["telegram_myriad", "discord_myriad"]
 The caller is read from `SUDO_USER`. For example, when `hermes` runs:
 
 ```sh
-sudo /usr/local/sbin/ops-runbook service restart hermes
+sudo /usr/local/sbin/agentctl service restart hermes
 ```
 
-`ops-runbook` checks `callers.hermes.service_control` for `hermes`.
+`agentctl` checks `callers.hermes.service_control` for `hermes`.
 
 For Alpine/OpenRC hosts, set:
 
@@ -128,19 +128,19 @@ per-service journald equivalent.
 Allowed operational commands:
 
 ```sh
-sudo /usr/local/sbin/ops-runbook service restart hermes
-sudo /usr/local/sbin/ops-runbook service start cloudflared
-sudo /usr/local/sbin/ops-runbook service stop tailscale
-sudo /usr/local/sbin/ops-runbook service reload cloudflared
-sudo /usr/local/sbin/ops-runbook service status cloudflared
-sudo /usr/local/sbin/ops-runbook logs hermes --lines 200 # systemd only
-sudo /usr/local/sbin/ops-runbook notify telegram_myriad --severity critical --message "disk full"
-sudo /usr/local/sbin/ops-runbook notify discord_myriad --title "Hermes" --message "service degraded"
-sudo /usr/local/sbin/ops-runbook config check
-sudo /usr/local/sbin/ops-runbook config explain
-sudo /usr/local/sbin/ops-runbook config explain --config-path ./config.toml
-ops-runbook config template --backend openrc --output ./config.toml
-sudo /usr/local/sbin/ops-runbook version
+sudo /usr/local/sbin/agentctl service restart hermes
+sudo /usr/local/sbin/agentctl service start cloudflared
+sudo /usr/local/sbin/agentctl service stop tailscale
+sudo /usr/local/sbin/agentctl service reload cloudflared
+sudo /usr/local/sbin/agentctl service status cloudflared
+sudo /usr/local/sbin/agentctl logs hermes --lines 200 # systemd only
+sudo /usr/local/sbin/agentctl notify telegram_myriad --severity critical --message "disk full"
+sudo /usr/local/sbin/agentctl notify discord_myriad --title "Hermes" --message "service degraded"
+sudo /usr/local/sbin/agentctl config check
+sudo /usr/local/sbin/agentctl config explain
+sudo /usr/local/sbin/agentctl config explain --config-path ./config.toml
+agentctl config template --backend openrc --output ./config.toml
+sudo /usr/local/sbin/agentctl version
 ```
 
 Rejected command families are intentionally absent:
@@ -162,27 +162,27 @@ Notification channels are configured under `[channels.<name>]` with
 Validate the config:
 
 ```sh
-sudo /usr/local/sbin/ops-runbook config check
-sudo /usr/local/sbin/ops-runbook config check --config-path ./config.toml
+sudo /usr/local/sbin/agentctl config check
+sudo /usr/local/sbin/agentctl config check --config-path ./config.toml
 ```
 
 Dump the validated config and per-caller derived commands:
 
 ```sh
-sudo /usr/local/sbin/ops-runbook config explain
-OPS_RUNBOOK_CONFIG_PATH=./config.toml ops-runbook config explain
+sudo /usr/local/sbin/agentctl config explain
+AGENTCTL_CONFIG_PATH=./config.toml agentctl config explain
 ```
 
-The default config path is `/etc/ops-runbook/config.toml`. Use
+The default config path is `/etc/agentctl/config.toml`. Use
 `--config-path` with `config check` or `config explain`, or set
-`OPS_RUNBOOK_CONFIG_PATH`, to inspect another config file.
+`AGENTCTL_CONFIG_PATH`, to inspect another config file.
 
 Generate a config template with:
 
 ```sh
-ops-runbook config template --backend systemd
-ops-runbook config template --backend openrc --output ./config.toml
-ops-runbook config template --backend openrc --output ./config.toml --force
+agentctl config template --backend systemd
+agentctl config template --backend openrc --output ./config.toml
+agentctl config template --backend openrc --output ./config.toml --force
 ```
 
 `config template` is an administrator convenience command and is not included in
@@ -191,5 +191,5 @@ the generated sudoers rule.
 Audit events are written to:
 
 ```text
-/var/log/ops-runbook/audit.log
+/var/log/agentctl/audit.log
 ```

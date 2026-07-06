@@ -10,7 +10,7 @@ This repository is a Cargo workspace for small, focused tools:
 crates/
   agentd/       local credential broker for agent tools
   agent-session/  GitHub App-backed command session runner
-  ops-runbook/  config-driven restricted executor for homelab operations
+  agentctl/  config-driven restricted executor for homelab operations
 ```
 
 Build individual tools with Cargo:
@@ -18,7 +18,7 @@ Build individual tools with Cargo:
 ```sh
 cargo build --release --bin agentd
 cargo build --release --bin agent-session
-cargo build --release --bin ops-runbook
+cargo build --release --bin agentctl
 ```
 
 ## agentd
@@ -102,29 +102,29 @@ See [crates/agent-session/README.md](crates/agent-session/README.md).
 See [crates/agentd/README.md](crates/agentd/README.md) for the broker config
 schema and UDS wire protocol.
 
-## ops-runbook
+## agentctl
 
-`ops-runbook` is a separate binary for allowing automation agents such as
+`agentctl` is a separate binary for allowing automation agents such as
 Hermes or OpenClaw to perform a narrow set of root operations through sudo:
 
-- [Installation and usage (English)](docs/ops-runbook-install-usage.en.md)
-- [설치 및 사용법 (한국어)](docs/ops-runbook-install-usage.ko.md)
+- [Installation and usage (English)](docs/agentctl-install-usage.en.md)
+- [설치 및 사용법 (한국어)](docs/agentctl-install-usage.ko.md)
 
 ```sh
-sudo /usr/local/sbin/ops-runbook service restart hermes
-sudo /usr/local/sbin/ops-runbook service start cloudflared
-sudo /usr/local/sbin/ops-runbook service stop tailscale
-sudo /usr/local/sbin/ops-runbook service reload cloudflared
-sudo /usr/local/sbin/ops-runbook service status cloudflared
-sudo /usr/local/sbin/ops-runbook logs hermes --lines 200
-sudo /usr/local/sbin/ops-runbook notify telegram_myriad --severity critical --message "disk full"
-sudo /usr/local/sbin/ops-runbook config check
-sudo /usr/local/sbin/ops-runbook config explain
-sudo /usr/local/sbin/ops-runbook config explain --config-path ./config.toml
-ops-runbook config template --backend openrc --output ./config.toml
+sudo /usr/local/sbin/agentctl service restart hermes
+sudo /usr/local/sbin/agentctl service start cloudflared
+sudo /usr/local/sbin/agentctl service stop tailscale
+sudo /usr/local/sbin/agentctl service reload cloudflared
+sudo /usr/local/sbin/agentctl service status cloudflared
+sudo /usr/local/sbin/agentctl logs hermes --lines 200
+sudo /usr/local/sbin/agentctl notify telegram_myriad --severity critical --message "disk full"
+sudo /usr/local/sbin/agentctl config check
+sudo /usr/local/sbin/agentctl config explain
+sudo /usr/local/sbin/agentctl config explain --config-path ./config.toml
+agentctl config template --backend openrc --output ./config.toml
 ```
 
-See [crates/ops-runbook/README.md](crates/ops-runbook/README.md).
+See [crates/agentctl/README.md](crates/agentctl/README.md).
 
 ## Releases
 

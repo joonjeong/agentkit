@@ -91,8 +91,8 @@ fn send_telegram(
         channel.bot_token_file.as_deref(),
     )?;
     let base_url =
-        if cfg!(debug_assertions) && std::env::var_os("OPS_RUNBOOK_TEST_OVERRIDES").is_some() {
-            std::env::var("OPS_RUNBOOK_TELEGRAM_API_BASE")
+        if cfg!(debug_assertions) && std::env::var_os("AGENTCTL_TEST_OVERRIDES").is_some() {
+            std::env::var("AGENTCTL_TELEGRAM_API_BASE")
                 .unwrap_or_else(|_| "https://api.telegram.org".to_owned())
         } else {
             "https://api.telegram.org".to_owned()
@@ -128,8 +128,8 @@ fn post_json<T>(client: &Client, channel: &str, url: &str, payload: &T) -> Resul
 where
     T: Serialize + ?Sized,
 {
-    if cfg!(debug_assertions) && std::env::var_os("OPS_RUNBOOK_TEST_OVERRIDES").is_some() {
-        if let Some(path) = std::env::var_os("OPS_RUNBOOK_NOTIFICATION_RECORD_PATH") {
+    if cfg!(debug_assertions) && std::env::var_os("AGENTCTL_TEST_OVERRIDES").is_some() {
+        if let Some(path) = std::env::var_os("AGENTCTL_NOTIFICATION_RECORD_PATH") {
             let path = PathBuf::from(path);
             let payload =
                 serde_json::to_string(payload).map_err(|source| Error::NotificationSend {
@@ -213,7 +213,7 @@ fn format_notification(notification: &Notification<'_>) -> String {
     match notification.title {
         Some(title) => lines.push(format!("[{}] {title}", notification.severity.as_str())),
         None => lines.push(format!(
-            "[{}] ops-runbook notify",
+            "[{}] agentctl notify",
             notification.severity.as_str()
         )),
     }

@@ -7,7 +7,7 @@ are easy to distribute through GitHub releases.
 
 Prefer independent crates under `crates/` over shared multiplexing binaries.
 Each tool should own its command surface directly, like `agent-session` and
-`ops-runbook`.
+`agentctl`.
 
 ## Current Tool Surface
 

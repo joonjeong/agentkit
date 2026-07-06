@@ -4,7 +4,7 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("ops-runbook must be executed via sudo")]
+    #[error("agentctl must be executed via sudo")]
     MissingSudoUser,
 
     #[error("direct root execution is not allowed")]

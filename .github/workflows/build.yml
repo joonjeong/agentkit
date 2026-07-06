@@ -15,8 +15,8 @@ on:
         description: "Build command driver, either cargo or cargo-zigbuild."
         required: true
         type: string
-      agent_session_version:
-        description: "AGENT_SESSION_VERSION value embedded by the build."
+      release_version:
+        description: "Release version embedded by built binaries."
         required: true
         type: string
       binary_name:
@@ -73,8 +73,9 @@ jobs:
       - name: Build
         env:
           BUILD_TOOL: ${{ inputs.build_tool }}
-          AGENT_SESSION_VERSION: ${{ inputs.agent_session_version }}
-          AGENTD_VERSION: ${{ inputs.agent_session_version }}
+          AGENT_SESSION_VERSION: ${{ inputs.release_version }}
+          AGENTD_VERSION: ${{ inputs.release_version }}
+          AGENTCTL_VERSION: ${{ inputs.release_version }}
           BINARY_NAME: ${{ inputs.binary_name }}
         run: |
           if [[ "${BUILD_TOOL}" == "cargo-zigbuild" ]]; then

@@ -10,20 +10,20 @@ use crate::config::{Backend, DEFAULT_CONFIG_PATH};
 use crate::error::{Error, Result};
 use crate::policy::validate_caller;
 
-const DEFAULT_BINARY_PATH: &str = "/usr/local/sbin/ops-runbook";
+const DEFAULT_BINARY_PATH: &str = "/usr/local/sbin/agentctl";
 const DEFAULT_GROUP: &str = "ops-agent";
-const DEFAULT_LOGROTATE_PATH: &str = "/etc/logrotate.d/ops-runbook";
+const DEFAULT_LOGROTATE_PATH: &str = "/etc/logrotate.d/agentctl";
 const DEFAULT_SUDOERS_PATH: &str = "/etc/sudoers.d/ops-agent";
-const DEFAULT_SUDO_LOG_PATH: &str = "/var/log/ops-runbook/sudo.log";
+const DEFAULT_SUDO_LOG_PATH: &str = "/var/log/agentctl/sudo.log";
 const SUDOERS_TEMPLATE: &str = include_str!("../resources/templates/sudoers.ops-agent.template");
 
 #[derive(Debug, Args)]
 pub struct BootstrapArgs {
-    /// Unix group allowed to run operational ops-runbook commands.
+    /// Unix group allowed to run operational agentctl commands.
     #[arg(long, default_value = DEFAULT_GROUP)]
     group: String,
 
-    /// Existing agent user to append to the ops-runbook group. Repeatable.
+    /// Existing agent user to append to the agentctl group. Repeatable.
     #[arg(long = "user")]
     users: Vec<String>,
 
@@ -35,7 +35,7 @@ pub struct BootstrapArgs {
     #[arg(long)]
     source_binary: Option<PathBuf>,
 
-    /// Installed ops-runbook path referenced from sudoers.
+    /// Installed agentctl path referenced from sudoers.
     #[arg(long, default_value = DEFAULT_BINARY_PATH)]
     binary_path: PathBuf,
 
@@ -47,7 +47,7 @@ pub struct BootstrapArgs {
     #[arg(long, default_value = DEFAULT_CONFIG_PATH)]
     config_path: PathBuf,
 
-    /// Audit log path used by ops-runbook.
+    /// Audit log path used by agentctl.
     #[arg(long, default_value = audit::DEFAULT_AUDIT_LOG_PATH)]
     audit_log_path: PathBuf,
 
@@ -90,7 +90,7 @@ pub fn run(args: BootstrapArgs) -> Result<i32> {
         for user in &args.users {
             validate_caller(user)?;
             run_command(
-                "OPS_RUNBOOK_USERMOD_PATH",
+                "AGENTCTL_USERMOD_PATH",
                 "/usr/sbin/usermod",
                 &["-aG", &args.group, user],
             )?;
@@ -124,7 +124,7 @@ pub fn run(args: BootstrapArgs) -> Result<i32> {
 }
 
 fn ensure_root() -> Result<()> {
-    if cfg!(debug_assertions) && std::env::var_os("OPS_RUNBOOK_TEST_OVERRIDES").is_some() {
+    if cfg!(debug_assertions) && std::env::var_os("AGENTCTL_TEST_OVERRIDES").is_some() {
         return Ok(());
     }
 
@@ -218,7 +218,7 @@ fn same_existing_file(left: &Path, right: &Path) -> bool {
 }
 
 fn ensure_group(group: &str) -> Result<()> {
-    let getent = command_path("OPS_RUNBOOK_GETENT_PATH", "/usr/bin/getent");
+    let getent = command_path("AGENTCTL_GETENT_PATH", "/usr/bin/getent");
     let status = Command::new(&getent)
         .args(["group", group])
         .status()
@@ -229,7 +229,7 @@ fn ensure_group(group: &str) -> Result<()> {
     }
 
     run_command(
-        "OPS_RUNBOOK_GROUPADD_PATH",
+        "AGENTCTL_GROUPADD_PATH",
         "/usr/sbin/groupadd",
         &["--system", group],
     )?;
@@ -254,7 +254,7 @@ fn run_command(env_name: &str, default_path: &str, args: &[&str]) -> Result<()> 
 }
 
 fn command_path(env_name: &str, default_path: &str) -> PathBuf {
-    if cfg!(debug_assertions) && std::env::var_os("OPS_RUNBOOK_TEST_OVERRIDES").is_some() {
+    if cfg!(debug_assertions) && std::env::var_os("AGENTCTL_TEST_OVERRIDES").is_some() {
         if let Some(path) = std::env::var_os(env_name) {
             return PathBuf::from(path);
         }
@@ -295,7 +295,7 @@ fn write_sudoers(path: &Path, contents: &[u8], skip_visudo: bool) -> Result<()> 
     set_mode(&temp_path, 0o440)?;
 
     if !skip_visudo {
-        let program = command_path("OPS_RUNBOOK_VISUDO_PATH", "/usr/sbin/visudo");
+        let program = command_path("AGENTCTL_VISUDO_PATH", "/usr/sbin/visudo");
         let status = Command::new(&program)
             .arg("-cf")
             .arg(&temp_path)
@@ -329,9 +329,7 @@ fn write_atomic(path: &Path, contents: &[u8], mode: u32) -> Result<()> {
 }
 
 fn temporary_path(path: &Path) -> PathBuf {
-    let file_name = path
-        .file_name()
-        .unwrap_or_else(|| OsStr::new("ops-runbook"));
+    let file_name = path.file_name().unwrap_or_else(|| OsStr::new("agentctl"));
     path.with_file_name(format!(".{}.tmp", file_name.to_string_lossy()))
 }
 

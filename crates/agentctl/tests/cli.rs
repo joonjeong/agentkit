@@ -9,14 +9,14 @@ static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[test]
 fn config_check_accepts_sample_config() {
-    let temp = temp_dir("ops-runbook-config-check");
+    let temp = temp_dir("agentctl-config-check");
     let config = write_config(&temp, SAMPLE_CONFIG);
 
-    Command::cargo_bin("ops-runbook")
+    Command::cargo_bin("agentctl")
         .expect("binary exists")
         .args(["config", "check"])
-        .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
-        .env("OPS_RUNBOOK_CONFIG_PATH", &config)
+        .env("AGENTCTL_TEST_OVERRIDES", "1")
+        .env("AGENTCTL_CONFIG_PATH", &config)
         .assert()
         .success()
         .stdout(
@@ -28,12 +28,12 @@ fn config_check_accepts_sample_config() {
 
 #[test]
 fn config_check_accepts_explicit_config_path() {
-    let temp = temp_dir("ops-runbook-config-check-path");
+    let temp = temp_dir("agentctl-config-check-path");
     let config = write_config(&temp, SAMPLE_CONFIG);
     let invalid_config = temp.join("invalid-config.toml");
     fs::write(&invalid_config, "not toml").expect("invalid config written");
 
-    Command::cargo_bin("ops-runbook")
+    Command::cargo_bin("agentctl")
         .expect("binary exists")
         .args([
             "config",
@@ -41,7 +41,7 @@ fn config_check_accepts_explicit_config_path() {
             "--config-path",
             config.to_str().expect("utf-8 path"),
         ])
-        .env("OPS_RUNBOOK_CONFIG_PATH", &invalid_config)
+        .env("AGENTCTL_CONFIG_PATH", &invalid_config)
         .assert()
         .success()
         .stdout(
@@ -53,14 +53,14 @@ fn config_check_accepts_explicit_config_path() {
 
 #[test]
 fn config_explain_dumps_validated_config() {
-    let temp = temp_dir("ops-runbook-explain");
+    let temp = temp_dir("agentctl-explain");
     let config = write_config(&temp, SAMPLE_CONFIG);
 
-    Command::cargo_bin("ops-runbook")
+    Command::cargo_bin("agentctl")
         .expect("binary exists")
         .args(["config", "explain"])
-        .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
-        .env("OPS_RUNBOOK_CONFIG_PATH", &config)
+        .env("AGENTCTL_TEST_OVERRIDES", "1")
+        .env("AGENTCTL_CONFIG_PATH", &config)
         .assert()
         .success()
         .stdout(
@@ -87,7 +87,7 @@ fn config_explain_dumps_validated_config() {
 
 #[test]
 fn config_template_prints_backend_template() {
-    Command::cargo_bin("ops-runbook")
+    Command::cargo_bin("agentctl")
         .expect("binary exists")
         .args(["config", "template", "--backend", "openrc"])
         .assert()
@@ -101,10 +101,10 @@ fn config_template_prints_backend_template() {
 
 #[test]
 fn config_template_writes_output_without_overwriting_by_default() {
-    let temp = temp_dir("ops-runbook-config-template");
+    let temp = temp_dir("agentctl-config-template");
     let output = temp.join("config.toml");
 
-    Command::cargo_bin("ops-runbook")
+    Command::cargo_bin("agentctl")
         .expect("binary exists")
         .args([
             "config",
@@ -118,7 +118,7 @@ fn config_template_writes_output_without_overwriting_by_default() {
     let contents = fs::read_to_string(&output).expect("template written");
     assert!(contents.contains("backend = \"systemd\""));
 
-    Command::cargo_bin("ops-runbook")
+    Command::cargo_bin("agentctl")
         .expect("binary exists")
         .args([
             "config",
@@ -132,7 +132,7 @@ fn config_template_writes_output_without_overwriting_by_default() {
         .failure()
         .stderr(predicate::str::contains("output already exists"));
 
-    Command::cargo_bin("ops-runbook")
+    Command::cargo_bin("agentctl")
         .expect("binary exists")
         .args([
             "config",
@@ -154,20 +154,20 @@ fn config_template_writes_output_without_overwriting_by_default() {
 
 #[test]
 fn service_status_runs_fixed_systemctl_without_shell() {
-    let temp = temp_dir("ops-runbook-status");
+    let temp = temp_dir("agentctl-status");
     let config = write_config(&temp, SAMPLE_CONFIG);
     let audit = temp.join("audit.log");
     let recorder = write_recorder(&temp, "systemctl-recorder");
     let record = temp.join("systemctl.args");
 
-    Command::cargo_bin("ops-runbook")
+    Command::cargo_bin("agentctl")
         .expect("binary exists")
         .args(["service", "status", "hermes"])
-        .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
-        .env("OPS_RUNBOOK_CONFIG_PATH", &config)
-        .env("OPS_RUNBOOK_AUDIT_LOG", &audit)
-        .env("OPS_RUNBOOK_SYSTEMCTL_PATH", &recorder)
-        .env("OPS_RUNBOOK_RECORD_PATH", &record)
+        .env("AGENTCTL_TEST_OVERRIDES", "1")
+        .env("AGENTCTL_CONFIG_PATH", &config)
+        .env("AGENTCTL_AUDIT_LOG", &audit)
+        .env("AGENTCTL_SYSTEMCTL_PATH", &recorder)
+        .env("AGENTCTL_RECORD_PATH", &record)
         .env("SUDO_USER", "hermes")
         .assert()
         .success();
@@ -187,20 +187,20 @@ fn service_status_runs_fixed_systemctl_without_shell() {
 
 #[test]
 fn service_start_runs_fixed_systemctl_without_shell() {
-    let temp = temp_dir("ops-runbook-start");
+    let temp = temp_dir("agentctl-start");
     let config = write_config(&temp, SAMPLE_CONFIG);
     let audit = temp.join("audit.log");
     let recorder = write_recorder(&temp, "systemctl-recorder");
     let record = temp.join("systemctl.args");
 
-    Command::cargo_bin("ops-runbook")
+    Command::cargo_bin("agentctl")
         .expect("binary exists")
         .args(["service", "start", "hermes"])
-        .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
-        .env("OPS_RUNBOOK_CONFIG_PATH", &config)
-        .env("OPS_RUNBOOK_AUDIT_LOG", &audit)
-        .env("OPS_RUNBOOK_SYSTEMCTL_PATH", &recorder)
-        .env("OPS_RUNBOOK_RECORD_PATH", &record)
+        .env("AGENTCTL_TEST_OVERRIDES", "1")
+        .env("AGENTCTL_CONFIG_PATH", &config)
+        .env("AGENTCTL_AUDIT_LOG", &audit)
+        .env("AGENTCTL_SYSTEMCTL_PATH", &recorder)
+        .env("AGENTCTL_RECORD_PATH", &record)
         .env("SUDO_USER", "hermes")
         .assert()
         .success();
@@ -215,20 +215,20 @@ fn service_start_runs_fixed_systemctl_without_shell() {
 
 #[test]
 fn service_stop_runs_fixed_systemctl_without_shell() {
-    let temp = temp_dir("ops-runbook-stop");
+    let temp = temp_dir("agentctl-stop");
     let config = write_config(&temp, SAMPLE_CONFIG);
     let audit = temp.join("audit.log");
     let recorder = write_recorder(&temp, "systemctl-recorder");
     let record = temp.join("systemctl.args");
 
-    Command::cargo_bin("ops-runbook")
+    Command::cargo_bin("agentctl")
         .expect("binary exists")
         .args(["service", "stop", "hermes"])
-        .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
-        .env("OPS_RUNBOOK_CONFIG_PATH", &config)
-        .env("OPS_RUNBOOK_AUDIT_LOG", &audit)
-        .env("OPS_RUNBOOK_SYSTEMCTL_PATH", &recorder)
-        .env("OPS_RUNBOOK_RECORD_PATH", &record)
+        .env("AGENTCTL_TEST_OVERRIDES", "1")
+        .env("AGENTCTL_CONFIG_PATH", &config)
+        .env("AGENTCTL_AUDIT_LOG", &audit)
+        .env("AGENTCTL_SYSTEMCTL_PATH", &recorder)
+        .env("AGENTCTL_RECORD_PATH", &record)
         .env("SUDO_USER", "hermes")
         .assert()
         .success();
@@ -243,12 +243,12 @@ fn service_stop_runs_fixed_systemctl_without_shell() {
 
 #[test]
 fn notify_posts_to_allowlisted_telegram_channel() {
-    let temp = temp_dir("ops-runbook-notify-telegram");
+    let temp = temp_dir("agentctl-notify-telegram");
     let config = write_config(&temp, TELEGRAM_NOTIFY_CONFIG);
     let audit = temp.join("audit.log");
     let record = temp.join("notification.record");
 
-    Command::cargo_bin("ops-runbook")
+    Command::cargo_bin("agentctl")
         .expect("binary exists")
         .args([
             "notify",
@@ -260,12 +260,12 @@ fn notify_posts_to_allowlisted_telegram_channel() {
             "--message",
             "/var is 95%",
         ])
-        .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
-        .env("OPS_RUNBOOK_CONFIG_PATH", &config)
-        .env("OPS_RUNBOOK_AUDIT_LOG", &audit)
-        .env("OPS_RUNBOOK_TELEGRAM_API_BASE", "https://telegram.test")
-        .env("OPS_RUNBOOK_NOTIFICATION_RECORD_PATH", &record)
-        .env("OPS_RUNBOOK_TEST_TELEGRAM_TOKEN", "telegram-token")
+        .env("AGENTCTL_TEST_OVERRIDES", "1")
+        .env("AGENTCTL_CONFIG_PATH", &config)
+        .env("AGENTCTL_AUDIT_LOG", &audit)
+        .env("AGENTCTL_TELEGRAM_API_BASE", "https://telegram.test")
+        .env("AGENTCTL_NOTIFICATION_RECORD_PATH", &record)
+        .env("AGENTCTL_TEST_TELEGRAM_TOKEN", "telegram-token")
         .env("SUDO_USER", "hermes")
         .assert()
         .success();
@@ -287,7 +287,7 @@ fn notify_posts_to_allowlisted_telegram_channel() {
 
 #[test]
 fn notify_posts_to_allowlisted_discord_channel() {
-    let temp = temp_dir("ops-runbook-notify-discord");
+    let temp = temp_dir("agentctl-notify-discord");
     let config = write_config(
         &temp,
         r#"
@@ -299,7 +299,7 @@ max_log_lines = 1000
 
 [channels.discord_myriad]
 type = "discord"
-webhook_url_env = "OPS_RUNBOOK_TEST_DISCORD_WEBHOOK"
+webhook_url_env = "AGENTCTL_TEST_DISCORD_WEBHOOK"
 
 [callers.hermes]
 notify = ["discord_myriad"]
@@ -308,7 +308,7 @@ notify = ["discord_myriad"]
     let audit = temp.join("audit.log");
     let record = temp.join("notification.record");
 
-    Command::cargo_bin("ops-runbook")
+    Command::cargo_bin("agentctl")
         .expect("binary exists")
         .args([
             "notify",
@@ -318,12 +318,12 @@ notify = ["discord_myriad"]
             "--message",
             "service degraded",
         ])
-        .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
-        .env("OPS_RUNBOOK_CONFIG_PATH", &config)
-        .env("OPS_RUNBOOK_AUDIT_LOG", &audit)
-        .env("OPS_RUNBOOK_NOTIFICATION_RECORD_PATH", &record)
+        .env("AGENTCTL_TEST_OVERRIDES", "1")
+        .env("AGENTCTL_CONFIG_PATH", &config)
+        .env("AGENTCTL_AUDIT_LOG", &audit)
+        .env("AGENTCTL_NOTIFICATION_RECORD_PATH", &record)
         .env(
-            "OPS_RUNBOOK_TEST_DISCORD_WEBHOOK",
+            "AGENTCTL_TEST_DISCORD_WEBHOOK",
             "https://discord.test/webhook",
         )
         .env("SUDO_USER", "hermes")
@@ -334,23 +334,23 @@ notify = ["discord_myriad"]
     assert!(request.contains("channel=discord_myriad"));
     assert!(request.contains("url=https://discord.test/webhook"));
     assert!(request
-        .contains(r#""content":"[warning] ops-runbook notify\ncaller: hermes\nservice degraded""#));
+        .contains(r#""content":"[warning] agentctl notify\ncaller: hermes\nservice degraded""#));
 
     fs::remove_dir_all(temp).expect("temporary directory removed");
 }
 
 #[test]
 fn notify_rejects_unallowlisted_channel_without_posting() {
-    let temp = temp_dir("ops-runbook-notify-denied");
+    let temp = temp_dir("agentctl-notify-denied");
     let config = write_config(&temp, TELEGRAM_NOTIFY_CONFIG);
     let audit = temp.join("audit.log");
 
-    Command::cargo_bin("ops-runbook")
+    Command::cargo_bin("agentctl")
         .expect("binary exists")
         .args(["notify", "telegram_other", "--message", "should not send"])
-        .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
-        .env("OPS_RUNBOOK_CONFIG_PATH", &config)
-        .env("OPS_RUNBOOK_AUDIT_LOG", &audit)
+        .env("AGENTCTL_TEST_OVERRIDES", "1")
+        .env("AGENTCTL_CONFIG_PATH", &config)
+        .env("AGENTCTL_AUDIT_LOG", &audit)
         .env("SUDO_USER", "hermes")
         .assert()
         .failure()
@@ -368,20 +368,20 @@ fn notify_rejects_unallowlisted_channel_without_posting() {
 
 #[test]
 fn openrc_service_status_runs_rc_service_without_shell() {
-    let temp = temp_dir("ops-runbook-openrc-status");
+    let temp = temp_dir("agentctl-openrc-status");
     let config = write_config(&temp, OPENRC_CONFIG);
     let audit = temp.join("audit.log");
     let recorder = write_recorder(&temp, "rc-service-recorder");
     let record = temp.join("rc-service.args");
 
-    Command::cargo_bin("ops-runbook")
+    Command::cargo_bin("agentctl")
         .expect("binary exists")
         .args(["service", "status", "hermes"])
-        .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
-        .env("OPS_RUNBOOK_CONFIG_PATH", &config)
-        .env("OPS_RUNBOOK_AUDIT_LOG", &audit)
-        .env("OPS_RUNBOOK_RC_SERVICE_PATH", &recorder)
-        .env("OPS_RUNBOOK_RECORD_PATH", &record)
+        .env("AGENTCTL_TEST_OVERRIDES", "1")
+        .env("AGENTCTL_CONFIG_PATH", &config)
+        .env("AGENTCTL_AUDIT_LOG", &audit)
+        .env("AGENTCTL_RC_SERVICE_PATH", &recorder)
+        .env("AGENTCTL_RECORD_PATH", &record)
         .env("SUDO_USER", "hermes")
         .assert()
         .success();
@@ -398,20 +398,20 @@ fn openrc_service_status_runs_rc_service_without_shell() {
 
 #[test]
 fn openrc_service_start_runs_rc_service_without_shell() {
-    let temp = temp_dir("ops-runbook-openrc-start");
+    let temp = temp_dir("agentctl-openrc-start");
     let config = write_config(&temp, OPENRC_CONFIG);
     let audit = temp.join("audit.log");
     let recorder = write_recorder(&temp, "rc-service-recorder");
     let record = temp.join("rc-service.args");
 
-    Command::cargo_bin("ops-runbook")
+    Command::cargo_bin("agentctl")
         .expect("binary exists")
         .args(["service", "start", "hermes"])
-        .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
-        .env("OPS_RUNBOOK_CONFIG_PATH", &config)
-        .env("OPS_RUNBOOK_AUDIT_LOG", &audit)
-        .env("OPS_RUNBOOK_RC_SERVICE_PATH", &recorder)
-        .env("OPS_RUNBOOK_RECORD_PATH", &record)
+        .env("AGENTCTL_TEST_OVERRIDES", "1")
+        .env("AGENTCTL_CONFIG_PATH", &config)
+        .env("AGENTCTL_AUDIT_LOG", &audit)
+        .env("AGENTCTL_RC_SERVICE_PATH", &recorder)
+        .env("AGENTCTL_RECORD_PATH", &record)
         .env("SUDO_USER", "hermes")
         .assert()
         .success();
@@ -426,16 +426,16 @@ fn openrc_service_start_runs_rc_service_without_shell() {
 
 #[test]
 fn openrc_logs_are_explicitly_unsupported() {
-    let temp = temp_dir("ops-runbook-openrc-logs");
+    let temp = temp_dir("agentctl-openrc-logs");
     let config = write_config(&temp, OPENRC_CONFIG);
     let audit = temp.join("audit.log");
 
-    Command::cargo_bin("ops-runbook")
+    Command::cargo_bin("agentctl")
         .expect("binary exists")
         .args(["logs", "hermes", "--lines", "200"])
-        .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
-        .env("OPS_RUNBOOK_CONFIG_PATH", &config)
-        .env("OPS_RUNBOOK_AUDIT_LOG", &audit)
+        .env("AGENTCTL_TEST_OVERRIDES", "1")
+        .env("AGENTCTL_CONFIG_PATH", &config)
+        .env("AGENTCTL_AUDIT_LOG", &audit)
         .env("SUDO_USER", "hermes")
         .assert()
         .failure()
@@ -451,7 +451,7 @@ fn openrc_logs_are_explicitly_unsupported() {
 
 #[test]
 fn config_check_rejects_unknown_config_fields() {
-    let temp = temp_dir("ops-runbook-unknown-config-field");
+    let temp = temp_dir("agentctl-unknown-config-field");
     let config = write_config(
         &temp,
         r#"
@@ -465,11 +465,11 @@ service_restarts = ["nginx"]
 "#,
     );
 
-    Command::cargo_bin("ops-runbook")
+    Command::cargo_bin("agentctl")
         .expect("binary exists")
         .args(["config", "check"])
-        .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
-        .env("OPS_RUNBOOK_CONFIG_PATH", &config)
+        .env("AGENTCTL_TEST_OVERRIDES", "1")
+        .env("AGENTCTL_CONFIG_PATH", &config)
         .assert()
         .failure()
         .stderr(predicate::str::contains("unknown field"));
@@ -479,20 +479,20 @@ service_restarts = ["nginx"]
 
 #[test]
 fn denied_target_is_audited_and_not_executed() {
-    let temp = temp_dir("ops-runbook-denied");
+    let temp = temp_dir("agentctl-denied");
     let config = write_config(&temp, SAMPLE_CONFIG);
     let audit = temp.join("audit.log");
     let recorder = write_recorder(&temp, "systemctl-recorder");
     let record = temp.join("systemctl.args");
 
-    Command::cargo_bin("ops-runbook")
+    Command::cargo_bin("agentctl")
         .expect("binary exists")
         .args(["service", "restart", "nginx"])
-        .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
-        .env("OPS_RUNBOOK_CONFIG_PATH", &config)
-        .env("OPS_RUNBOOK_AUDIT_LOG", &audit)
-        .env("OPS_RUNBOOK_SYSTEMCTL_PATH", &recorder)
-        .env("OPS_RUNBOOK_RECORD_PATH", &record)
+        .env("AGENTCTL_TEST_OVERRIDES", "1")
+        .env("AGENTCTL_CONFIG_PATH", &config)
+        .env("AGENTCTL_AUDIT_LOG", &audit)
+        .env("AGENTCTL_SYSTEMCTL_PATH", &recorder)
+        .env("AGENTCTL_RECORD_PATH", &record)
         .env("SUDO_USER", "hermes")
         .assert()
         .failure()
@@ -509,16 +509,16 @@ fn denied_target_is_audited_and_not_executed() {
 
 #[test]
 fn logs_rejects_line_count_above_config_maximum() {
-    let temp = temp_dir("ops-runbook-lines");
+    let temp = temp_dir("agentctl-lines");
     let config = write_config(&temp, SAMPLE_CONFIG);
     let audit = temp.join("audit.log");
 
-    Command::cargo_bin("ops-runbook")
+    Command::cargo_bin("agentctl")
         .expect("binary exists")
         .args(["logs", "hermes", "--lines", "999999"])
-        .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
-        .env("OPS_RUNBOOK_CONFIG_PATH", &config)
-        .env("OPS_RUNBOOK_AUDIT_LOG", &audit)
+        .env("AGENTCTL_TEST_OVERRIDES", "1")
+        .env("AGENTCTL_CONFIG_PATH", &config)
+        .env("AGENTCTL_AUDIT_LOG", &audit)
         .env("SUDO_USER", "hermes")
         .assert()
         .failure()
@@ -532,14 +532,14 @@ fn logs_rejects_line_count_above_config_maximum() {
 
 #[test]
 fn direct_root_execution_is_rejected() {
-    let temp = temp_dir("ops-runbook-root");
+    let temp = temp_dir("agentctl-root");
     let config = write_config(&temp, SAMPLE_CONFIG);
 
-    Command::cargo_bin("ops-runbook")
+    Command::cargo_bin("agentctl")
         .expect("binary exists")
         .args(["service", "status", "hermes"])
-        .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
-        .env("OPS_RUNBOOK_CONFIG_PATH", &config)
+        .env("AGENTCTL_TEST_OVERRIDES", "1")
+        .env("AGENTCTL_CONFIG_PATH", &config)
         .env("SUDO_USER", "root")
         .assert()
         .failure()
@@ -552,18 +552,18 @@ fn direct_root_execution_is_rejected() {
 
 #[test]
 fn bootstrap_installs_binary_and_writes_configurable_files() {
-    let temp = temp_dir("ops-runbook-bootstrap");
-    let source_binary = temp.join("source/ops-runbook");
-    let binary = temp.join("bin/ops-runbook");
+    let temp = temp_dir("agentctl-bootstrap");
+    let source_binary = temp.join("source/agentctl");
+    let binary = temp.join("bin/agentctl");
     let sudoers = temp.join("sudoers/custom-ops-agent");
     let config = temp.join("etc/config.toml");
     let audit_log = temp.join("logs/audit.log");
     let sudo_log = temp.join("logs/sudo.log");
-    let logrotate = temp.join("logrotate/ops-runbook");
+    let logrotate = temp.join("logrotate/agentctl");
     fs::create_dir(source_binary.parent().expect("source parent")).expect("source parent created");
-    fs::write(&source_binary, b"fake ops-runbook binary").expect("source binary written");
+    fs::write(&source_binary, b"fake agentctl binary").expect("source binary written");
 
-    Command::cargo_bin("ops-runbook")
+    Command::cargo_bin("agentctl")
         .expect("binary exists")
         .args([
             "bootstrap",
@@ -586,14 +586,14 @@ fn bootstrap_installs_binary_and_writes_configurable_files() {
             "--logrotate-path",
             logrotate.to_str().expect("utf-8 path"),
         ])
-        .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
+        .env("AGENTCTL_TEST_OVERRIDES", "1")
         .assert()
         .success()
         .stdout(predicate::str::contains("sudoers ready:"));
 
     assert_eq!(
         fs::read(&binary).expect("installed binary"),
-        b"fake ops-runbook binary"
+        b"fake agentctl binary"
     );
     let sudoers_contents = fs::read_to_string(&sudoers).expect("sudoers written");
     assert!(sudoers_contents.contains("Defaults:%custom-ops"));
@@ -618,7 +618,7 @@ fn bootstrap_installs_binary_and_writes_configurable_files() {
 
 #[test]
 fn bootstrap_rejects_relative_sudoers_paths() {
-    Command::cargo_bin("ops-runbook")
+    Command::cargo_bin("agentctl")
         .expect("binary exists")
         .args([
             "bootstrap",
@@ -627,7 +627,7 @@ fn bootstrap_rejects_relative_sudoers_paths() {
             "--sudoers-path",
             "relative/sudoers",
         ])
-        .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
+        .env("AGENTCTL_TEST_OVERRIDES", "1")
         .assert()
         .failure()
         .stderr(predicate::str::contains("--sudoers-path must be absolute"));
@@ -635,18 +635,18 @@ fn bootstrap_rejects_relative_sudoers_paths() {
 
 #[test]
 fn bootstrap_can_write_openrc_default_config() {
-    let temp = temp_dir("ops-runbook-bootstrap-openrc");
-    let source_binary = temp.join("source/ops-runbook");
-    let binary = temp.join("bin/ops-runbook");
+    let temp = temp_dir("agentctl-bootstrap-openrc");
+    let source_binary = temp.join("source/agentctl");
+    let binary = temp.join("bin/agentctl");
     let sudoers = temp.join("sudoers/ops-agent");
     let config = temp.join("etc/config.toml");
     let audit_log = temp.join("logs/audit.log");
     let sudo_log = temp.join("logs/sudo.log");
-    let logrotate = temp.join("logrotate/ops-runbook");
+    let logrotate = temp.join("logrotate/agentctl");
     fs::create_dir(source_binary.parent().expect("source parent")).expect("source parent created");
-    fs::write(&source_binary, b"fake ops-runbook binary").expect("source binary written");
+    fs::write(&source_binary, b"fake agentctl binary").expect("source binary written");
 
-    Command::cargo_bin("ops-runbook")
+    Command::cargo_bin("agentctl")
         .expect("binary exists")
         .args([
             "bootstrap",
@@ -669,7 +669,7 @@ fn bootstrap_can_write_openrc_default_config() {
             "--logrotate-path",
             logrotate.to_str().expect("utf-8 path"),
         ])
-        .env("OPS_RUNBOOK_TEST_OVERRIDES", "1")
+        .env("AGENTCTL_TEST_OVERRIDES", "1")
         .assert()
         .success();
 
@@ -703,7 +703,7 @@ fn write_recorder(dir: &Path, name: &str) -> PathBuf {
     let path = dir.join(name);
     fs::write(
         &path,
-        "#!/bin/sh\n: > \"$OPS_RUNBOOK_RECORD_PATH\"\nfor arg in \"$@\"; do printf '%s\\n' \"$arg\" >> \"$OPS_RUNBOOK_RECORD_PATH\"; done\n",
+        "#!/bin/sh\n: > \"$AGENTCTL_RECORD_PATH\"\nfor arg in \"$@\"; do printf '%s\\n' \"$arg\" >> \"$AGENTCTL_RECORD_PATH\"; done\n",
     )
     .expect("recorder written");
     let mut permissions = fs::metadata(&path)
@@ -719,7 +719,7 @@ fn write_recorder(dir: &Path, name: &str) -> PathBuf {
     let path = dir.join(format!("{name}.bat"));
     fs::write(
         &path,
-        "@echo off\r\nbreak > %OPS_RUNBOOK_RECORD_PATH%\r\n:loop\r\nif \"%1\"==\"\" exit /b 0\r\necho %1>> %OPS_RUNBOOK_RECORD_PATH%\r\nshift\r\ngoto loop\r\n",
+        "@echo off\r\nbreak > %AGENTCTL_RECORD_PATH%\r\n:loop\r\nif \"%1\"==\"\" exit /b 0\r\necho %1>> %AGENTCTL_RECORD_PATH%\r\nshift\r\ngoto loop\r\n",
     )
     .expect("recorder written");
     path
@@ -737,7 +737,7 @@ max_log_lines = 1000
 [channels.telegram_myriad]
 type = "telegram"
 chat_id = "123456789"
-bot_token_env = "OPS_RUNBOOK_TEST_TELEGRAM_TOKEN"
+bot_token_env = "AGENTCTL_TEST_TELEGRAM_TOKEN"
 
 [callers.hermes]
 notify = ["telegram_myriad"]

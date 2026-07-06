@@ -1,6 +1,6 @@
-# Example ops-runbook config for systemd hosts.
+# Example agentctl config for systemd hosts.
 #
-# Runtime config is installed to /etc/ops-runbook/config.toml. Edit that file
+# Runtime config is installed to /etc/agentctl/config.toml. Edit that file
 # on each host after bootstrap. This example keeps one caller and a small
 # service allowlist.
 
@@ -13,11 +13,11 @@ max_log_lines = 1000
 [channels.telegram_myriad]
 type = "telegram"
 chat_id = "123456789"
-bot_token_file = "/etc/ops-runbook/secrets/telegram-bot-token"
+bot_token_file = "/etc/agentctl/secrets/telegram-bot-token"
 
 [channels.discord_myriad]
 type = "discord"
-webhook_url_file = "/etc/ops-runbook/secrets/discord-webhook-url"
+webhook_url_file = "/etc/agentctl/secrets/discord-webhook-url"
 
 [callers.hermes]
 # Allows service start, stop, restart, and reload.

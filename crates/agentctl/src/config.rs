@@ -9,7 +9,7 @@ use serde::Deserialize;
 use crate::error::{Error, Result};
 use crate::policy::{validate_caller, validate_target, Action};
 
-pub const DEFAULT_CONFIG_PATH: &str = "/etc/ops-runbook/config.toml";
+pub const DEFAULT_CONFIG_PATH: &str = "/etc/agentctl/config.toml";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -194,7 +194,7 @@ fn validate_secret_ref(name: &str, env: Option<&str>, file: Option<&Path>) -> Re
 }
 
 pub fn configured_config_path() -> PathBuf {
-    if let Some(path) = std::env::var_os("OPS_RUNBOOK_CONFIG_PATH") {
+    if let Some(path) = std::env::var_os("AGENTCTL_CONFIG_PATH") {
         return PathBuf::from(path);
     }
 
