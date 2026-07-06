@@ -117,6 +117,7 @@ fn ops_session_runs_command_with_installation_token_environment() {
 
     let request = server.join().expect("server thread completed");
     assert!(request.contains(r#""type":"github_app_token""#));
+    assert!(request.contains(r#""version":1"#));
     fs::remove_dir_all(socket_dir).expect("socket dir removed");
 }
 
@@ -170,6 +171,7 @@ fn ops_session_can_configure_child_only_git_credentials() {
 
     let request = server.join().expect("server thread completed");
     assert!(request.contains(r#""type":"github_app_token""#));
+    assert!(request.contains(r#""version":1"#));
     fs::remove_dir_all(output_dir).expect("temporary output directory removed");
     fs::remove_dir_all(socket_dir).expect("socket dir removed");
 }
@@ -196,6 +198,7 @@ fn ops_session_exits_with_child_exit_code() {
 
     let request = server.join().expect("server thread completed");
     assert!(request.contains(r#""type":"github_app_token""#));
+    assert!(request.contains(r#""version":1"#));
     fs::remove_dir_all(socket_dir).expect("socket dir removed");
 }
 
@@ -260,25 +263,6 @@ fn ops_session_reports_agentd_error() {
 
 #[cfg(unix)]
 #[test]
-fn ops_session_rejects_token_cache_with_agentd() {
-    let mut cmd = Command::cargo_bin("ops-session").expect("binary exists");
-
-    cmd.args([
-        "github-app",
-        "run",
-        "--token-cache",
-        "--",
-        "sh",
-        "-c",
-        "test \"$GH_TOKEN\" = test-token",
-    ])
-    .assert()
-    .failure()
-    .stderr(predicate::str::contains("--token-cache is not supported"));
-}
-
-#[cfg(unix)]
-#[test]
 fn ops_session_exits_with_child_signal_status() {
     let (socket_dir, socket_path, server) =
         agentd_token_response_server("test-token", "https://api.github.com");
@@ -299,6 +283,7 @@ fn ops_session_exits_with_child_signal_status() {
 
     let request = server.join().expect("server thread completed");
     assert!(request.contains(r#""type":"github_app_token""#));
+    assert!(request.contains(r#""version":1"#));
     fs::remove_dir_all(socket_dir).expect("socket dir removed");
 }
 
@@ -340,6 +325,7 @@ fn ops_session_accepts_command_options_after_separator() {
 
         let request = server.join().expect("server thread completed");
         assert!(request.contains(r#""repos":["OWNER/REPO"]"#));
+        assert!(request.contains(r#""version":1"#));
         fs::remove_dir_all(socket_dir).expect("socket dir removed");
     }
 
@@ -445,7 +431,7 @@ fn agentd_token_response_server(
     thread::JoinHandle<String>,
 ) {
     agentd_response_server(&format!(
-        r#"{{"status":"ok","token":"{token}","expires_at":"2026-06-15T00:00:00Z","api_url":"{api_url}"}}"#
+        r#"{{"status":"ok","version":1,"token":"{token}","expires_at":"2026-06-15T00:00:00Z","api_url":"{api_url}"}}"#
     ))
 }
 
@@ -457,7 +443,9 @@ fn agentd_error_response_server(
     std::path::PathBuf,
     thread::JoinHandle<String>,
 ) {
-    agentd_response_server(&format!(r#"{{"status":"error","error":"{error}"}}"#))
+    agentd_response_server(&format!(
+        r#"{{"status":"error","version":1,"error":"{error}"}}"#
+    ))
 }
 
 #[cfg(unix)]

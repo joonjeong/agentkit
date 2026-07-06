@@ -99,6 +99,8 @@ ops-session github-app run \
 Validate broker configuration with `agentd config check`.
 
 See [crates/ops-session/README.md](crates/ops-session/README.md).
+See [crates/agentd/README.md](crates/agentd/README.md) for the broker config
+schema and UDS wire protocol.
 
 ## ops-runbook
 

@@ -9,54 +9,10 @@ ops-session github-app run \
   -- git remote update
 ```
 
-GitHub credentials are read by `agentd`, not by `ops-session`. Put provider
-profiles in the system-wide broker config at `/etc/agentd/config.toml`:
-
-```toml
-[github_app]
-app_id = 123456
-api_url = "https://api.github.com"
-default_profile = "codex-review"
-
-[github_app.profiles.codex-review]
-repos = ["OWNER/REPO"]
-
-[github_app.profiles.codex-review.private_key]
-type = "file"
-path = "/etc/agentd/secrets/codex-review-github-app.private-key.pem"
-
-[github_app.profiles.codex-review.permissions]
-contents = "read"
-pull_requests = "read"
-
-[github_app.profiles.codex-maintainer]
-repos = ["OWNER/REPO"]
-
-[github_app.profiles.codex-maintainer.private_key]
-type = "command"
-command = "/usr/bin/op"
-args = ["read", "op://ops/github-apps/codex-maintainer/private-key"]
-
-[github_app.profiles.codex-maintainer.permissions]
-contents = "write"
-pull_requests = "write"
-```
-
-`app_id`, `installation_id`, `api_url`, `default_profile`, and auth profiles are
-set under `[github_app]`. Profiles are map entries keyed by profile name, so
-`[github_app.profiles.codex-review]` defines the `codex-review` auth profile.
-On a node that runs multiple agents, give each agent a distinct auth profile and
-set `OPS_SESSION_GITHUB_PROFILE` in that agent's service environment. Each auth
-profile owns its private key source, `repos`, optional `installation_id`,
-and `permissions`.
-
-For a simple local secret store, keep private keys in files readable by the
-agent users' group, for example:
-
-```sh
-sudo chown root:agentd /etc/agentd/secrets/codex-review-github-app.private-key.pem
-sudo chmod 0640 /etc/agentd/secrets/codex-review-github-app.private-key.pem
-```
+GitHub credentials and provider profiles are read by `agentd`, not by
+`ops-session`. Configure profile names, repository scope, permissions, and
+private key sources in `/etc/agentd/config.toml`; see
+[agentd](../agentd/README.md) for the config schema and wire protocol.
 
 `--profile` or `OPS_SESSION_GITHUB_PROFILE` selects the agentd profile.
 `--repo OWNER/REPO` and `--permission key=value` request a subset of that
@@ -69,7 +25,7 @@ injected as both `GH_TOKEN` and `GITHUB_TOKEN`.
 
 Useful options:
 
-- `--profile NAME` selects a named config profile. Prefer
+- `--profile NAME` selects a named agentd profile. Prefer
   `OPS_SESSION_GITHUB_PROFILE` for long-running agent services.
 - `--git-credentials` configures a child-only Git credential helper for HTTPS
   GitHub remotes.

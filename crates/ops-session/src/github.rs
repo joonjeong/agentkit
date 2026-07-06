@@ -16,6 +16,7 @@ const OPS_SESSION_WORKFLOW_SKILL_NAME: &str = "ops-session-workflow";
 const OPS_SESSION_WORKFLOW_SKILL: &str =
     include_str!("../resources/skills/ops-session-workflow/SKILL.md");
 const DEFAULT_AGENTD_SOCKET_PATH: &str = "/run/agentd/agentd.sock";
+const AGENTD_WIRE_PROTOCOL_VERSION: u32 = 1;
 
 #[derive(Debug, Args)]
 #[command(
@@ -73,26 +74,17 @@ pub struct GithubSessionArgs {
     )]
     agentd_socket: PathBuf,
 
-    /// Named auth profile from the config file.
+    /// Named GitHub App profile from agentd.
     ///
     /// Use this when multiple agents on a node need different repository scopes
     /// or token permissions.
     #[arg(long, env = "OPS_SESSION_GITHUB_PROFILE")]
     profile: Option<String>,
 
-    /// Reuse a valid cached installation token.
-    ///
-    /// Disabled by default. When enabled, the selected config profile is part
-    /// of the cache key.
-    #[arg(long)]
-    token_cache: bool,
-
     /// Scope the token to a repository.
     ///
-    /// Repeat for multiple repositories. Without --installation-id, the first
-    /// --repo value is also used to discover the installation. Public repository
-    /// access alone is not enough; the GitHub App must be installed on the repo
-    /// or owner.
+    /// Repeat for multiple repositories. agentd validates requested repositories
+    /// against the selected profile before minting a token.
     #[arg(long = "repo", value_name = "OWNER/REPO")]
     repos: Vec<String>,
 
@@ -147,7 +139,8 @@ pub struct AppAgentWorkflowSkillArgs {
 }
 
 #[derive(Debug, Serialize)]
-struct AgentGithubTokenRequest {
+struct AgentdWireGithubTokenRequest {
+    version: u32,
     #[serde(rename = "type")]
     request_type: &'static str,
     profile: Option<String>,
@@ -157,14 +150,16 @@ struct AgentGithubTokenRequest {
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "status", rename_all = "snake_case")]
-enum AgentTokenResponse {
+enum AgentdWireTokenResponse {
     Ok {
+        version: u32,
         token: String,
         #[allow(dead_code)]
         expires_at: Option<String>,
         api_url: String,
     },
     Error {
+        version: u32,
         error: String,
     },
 }
@@ -187,11 +182,6 @@ pub fn github_app(args: GithubAppArgs) -> Result<()> {
 }
 
 pub fn github_session(args: GithubSessionArgs) -> Result<()> {
-    if args.token_cache {
-        return Err(anyhow!(
-            "--token-cache is not supported for agentd-backed sessions"
-        ));
-    }
     let token = request_agentd_github_token(&args)?;
     run_with_installation_token(
         &args.command,
@@ -202,7 +192,8 @@ pub fn github_session(args: GithubSessionArgs) -> Result<()> {
 }
 
 fn request_agentd_github_token(args: &GithubSessionArgs) -> Result<AgentGithubToken> {
-    let request = AgentGithubTokenRequest {
+    let request = AgentdWireGithubTokenRequest {
+        version: AGENTD_WIRE_PROTOCOL_VERSION,
         request_type: "github_app_token",
         profile: args.profile.clone(),
         repos: args.repos.clone(),
@@ -225,18 +216,32 @@ fn request_agentd_github_token(args: &GithubSessionArgs) -> Result<AgentGithubTo
     reader
         .read_line(&mut response)
         .context("failed to read agentd response")?;
-    match serde_json::from_str::<AgentTokenResponse>(&response)
+    match serde_json::from_str::<AgentdWireTokenResponse>(&response)
         .context("failed to parse agentd response")?
     {
-        AgentTokenResponse::Ok {
+        AgentdWireTokenResponse::Ok {
+            version,
             token,
             expires_at: _,
             api_url,
-        } => Ok(AgentGithubToken { token, api_url }),
-        AgentTokenResponse::Error { error } => {
+        } => {
+            validate_agentd_wire_version(version)?;
+            Ok(AgentGithubToken { token, api_url })
+        }
+        AgentdWireTokenResponse::Error { version, error } => {
+            validate_agentd_wire_version(version)?;
             Err(anyhow!("agentd rejected GitHub App token request: {error}"))
         }
     }
+}
+
+fn validate_agentd_wire_version(version: u32) -> Result<()> {
+    if version != AGENTD_WIRE_PROTOCOL_VERSION {
+        return Err(anyhow!(
+            "unsupported agentd wire protocol version {version}; expected {AGENTD_WIRE_PROTOCOL_VERSION}"
+        ));
+    }
+    Ok(())
 }
 
 pub fn create_app_agent_workflow_skill(args: AppAgentWorkflowSkillArgs) -> Result<()> {

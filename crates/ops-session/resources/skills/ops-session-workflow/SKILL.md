@@ -30,53 +30,10 @@ or the ambient environment.
 Use `agentd config check --config-path PATH` for local checks and development
 runs.
 
-For GitHub App sessions:
-
-```toml
-[github_app]
-app_id = 123456
-api_url = "https://api.github.com"
-default_profile = "codex-review"
-
-[github_app.profiles.codex-review]
-repos = ["OWNER/REPO"]
-
-[github_app.profiles.codex-review.private_key]
-type = "file"
-path = "/etc/agentd/secrets/codex-review-github-app.private-key.pem"
-
-[github_app.profiles.codex-review.permissions]
-contents = "read"
-pull_requests = "read"
-
-[github_app.profiles.codex-maintainer]
-repos = ["OWNER/REPO"]
-
-[github_app.profiles.codex-maintainer.private_key]
-type = "command"
-command = "/usr/bin/op"
-args = ["read", "op://ops/github-apps/codex-maintainer/private-key"]
-
-[github_app.profiles.codex-maintainer.permissions]
-contents = "write"
-pull_requests = "write"
-```
-
 On a node that runs multiple agents, give each agent a distinct provider profile
 and set the profile selector in that agent's service environment. For GitHub App
-sessions, use `OPS_SESSION_GITHUB_PROFILE`. Each auth profile owns its private
-key source, repository scope, optional installation ID, requested token
-permissions.
-
-GitHub App private keys are read from
-`[github_app.profiles.<profile>.private_key]` sources. `type = "file"` paths
-and `type = "command"` commands must be absolute. Command sources are executed
-without a shell and use stdout as the private key. Do not pass private key paths
-or private key contents through shell arguments or environment variables.
-
-For a simple local secret store, keep private key files readable by the agent
-broker user's group, for example `root:agentd` with mode `0640`. `ops-session`
-does not read private keys; it only talks to the local broker socket.
+sessions, use `OPS_SESSION_GITHUB_PROFILE`. `ops-session` does not read private
+keys or provider config; it only talks to the local broker socket.
 
 ## GitHub App Sessions
 

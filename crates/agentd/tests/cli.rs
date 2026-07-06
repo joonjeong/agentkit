@@ -79,7 +79,7 @@ fn serve_once_mints_github_app_token_over_uds() {
     let mut stream = UnixStream::connect(&socket_path).expect("client connects");
     stream
         .write_all(
-            br#"{"type":"github_app_token","profile":"default","repos":["OWNER/REPO"],"permissions":{"contents":"read"}}"#,
+            br#"{"version":1,"type":"github_app_token","profile":"default","repos":["OWNER/REPO"],"permissions":{"contents":"read"}}"#,
         )
         .expect("request writes");
     stream.write_all(b"\n").expect("request newline writes");
@@ -92,6 +92,7 @@ fn serve_once_mints_github_app_token_over_uds() {
     let status = agentd.wait().expect("agentd exits");
     assert!(status.success());
     assert!(response.contains(r#""status":"ok""#));
+    assert!(response.contains(r#""version":1"#));
     assert!(response.contains(r#""token":"agentd-test-token""#));
     assert!(response.contains(&format!(r#""api_url":"{api_url}""#)));
 
@@ -126,7 +127,7 @@ fn serve_once_rejects_repo_outside_profile_scope() {
     let mut stream = UnixStream::connect(&socket_path).expect("client connects");
     stream
         .write_all(
-            br#"{"type":"github_app_token","profile":"default","repos":["OWNER/OTHER"],"permissions":{"contents":"read"}}"#,
+            br#"{"version":1,"type":"github_app_token","profile":"default","repos":["OWNER/OTHER"],"permissions":{"contents":"read"}}"#,
         )
         .expect("request writes");
     stream.write_all(b"\n").expect("request newline writes");
