@@ -8,6 +8,7 @@ use crate::audit;
 use crate::bootstrap::{self, BootstrapArgs};
 use crate::config::{configured_config_path, Backend, Config};
 use crate::error::{Error, Result};
+use crate::github;
 use crate::notification::{self, Notification, Severity};
 use crate::policy::{is_allowed, validate_target, Action};
 use crate::runner;
@@ -36,8 +37,13 @@ enum Command {
     Service(ServiceCommand),
     /// Show allowlisted service logs.
     Logs(LogsArgs),
-    /// Send an allowlisted notification.
-    Notify(NotifyArgs),
+    /// GitHub App-backed command session commands.
+    #[command(name = "github-app")]
+    GithubApp(github::GithubAppArgs),
+    /// Telegram provider commands.
+    Telegram(TelegramCommand),
+    /// Discord provider commands.
+    Discord(DiscordCommand),
     /// Validate or inspect config.
     Config(ConfigCommand),
     /// Print the agentctl version.
@@ -77,17 +83,27 @@ struct LogsArgs {
 }
 
 #[derive(Debug, Args)]
-struct NotifyArgs {
+struct TelegramCommand {
     #[command(subcommand)]
-    provider: NotifyProviderCommand,
+    command: TelegramSubcommand,
 }
 
 #[derive(Debug, Subcommand)]
-enum NotifyProviderCommand {
+enum TelegramSubcommand {
     /// Send a Telegram notification through an agentd Telegram profile.
-    Telegram(TelegramNotifyArgs),
+    Notify(TelegramNotifyArgs),
+}
+
+#[derive(Debug, Args)]
+struct DiscordCommand {
+    #[command(subcommand)]
+    command: DiscordSubcommand,
+}
+
+#[derive(Debug, Subcommand)]
+enum DiscordSubcommand {
     /// Send a Discord notification through an agentd Discord profile.
-    Discord(DiscordNotifyArgs),
+    Notify(DiscordNotifyArgs),
 }
 
 #[derive(Debug, Args)]
@@ -217,7 +233,17 @@ where
             }
         },
         Command::Logs(args) => execute(Action::Logs, &args.service, Some(args.lines), &config_path),
-        Command::Notify(args) => notify(args),
+        Command::GithubApp(args) => {
+            github::github_app(args)
+                .map_err(|error| Error::GithubAppSession(format!("{error:#}")))?;
+            Ok(0)
+        }
+        Command::Telegram(command) => match command.command {
+            TelegramSubcommand::Notify(args) => notify_telegram(args),
+        },
+        Command::Discord(command) => match command.command {
+            DiscordSubcommand::Notify(args) => notify_discord(args),
+        },
         Command::Config(command) => match command.command {
             ConfigSubcommand::Check(args) => {
                 check_config(args.config_path.as_deref().unwrap_or(&config_path))
@@ -333,27 +359,28 @@ fn template_config(args: ConfigTemplateArgs) -> Result<i32> {
     Ok(0)
 }
 
-fn notify(args: NotifyArgs) -> Result<i32> {
-    match args.provider {
-        NotifyProviderCommand::Telegram(args) => notify_via_agentd(
-            "telegram",
-            &args.profile,
-            Some(&args.chat_id),
-            &args.agentd_socket,
-            args.severity,
-            args.title.as_deref(),
-            &args.message,
-        ),
-        NotifyProviderCommand::Discord(args) => notify_via_agentd(
-            "discord",
-            &args.profile,
-            None,
-            &args.agentd_socket,
-            args.severity,
-            args.title.as_deref(),
-            &args.message,
-        ),
-    }
+fn notify_telegram(args: TelegramNotifyArgs) -> Result<i32> {
+    notify_via_agentd(
+        "telegram",
+        &args.profile,
+        Some(&args.chat_id),
+        &args.agentd_socket,
+        args.severity,
+        args.title.as_deref(),
+        &args.message,
+    )
+}
+
+fn notify_discord(args: DiscordNotifyArgs) -> Result<i32> {
+    notify_via_agentd(
+        "discord",
+        &args.profile,
+        None,
+        &args.agentd_socket,
+        args.severity,
+        args.title.as_deref(),
+        &args.message,
+    )
 }
 
 fn notify_via_agentd(
@@ -482,7 +509,7 @@ fn execute(
         Action::Logs => runner::logs(config.backend(), target, lines),
         Action::Notify => {
             return Err(Error::InvalidConfigOption(
-                "notify must use notify command".to_owned(),
+                "notifications must use provider notify command".to_owned(),
             ))
         }
     }?;

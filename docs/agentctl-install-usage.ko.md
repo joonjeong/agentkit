@@ -122,8 +122,8 @@ sudo /usr/local/sbin/agentctl service stop tailscale
 sudo /usr/local/sbin/agentctl service reload cloudflared
 sudo /usr/local/sbin/agentctl service status cloudflared
 sudo /usr/local/sbin/agentctl logs hermes --lines 200 # systemd only
-sudo /usr/local/sbin/agentctl notify telegram myriad --chat-id 123456789 --severity critical --message "disk full"
-sudo /usr/local/sbin/agentctl notify discord myriad --title "Hermes" --message "service degraded"
+sudo /usr/local/sbin/agentctl telegram notify myriad --chat-id 123456789 --severity critical --message "disk full"
+sudo /usr/local/sbin/agentctl discord notify myriad --title "Hermes" --message "service degraded"
 sudo /usr/local/sbin/agentctl config check
 sudo /usr/local/sbin/agentctl config explain
 sudo /usr/local/sbin/agentctl config explain --config-path ./config.toml
@@ -139,8 +139,8 @@ sudo /usr/local/sbin/agentctl version
 - raw `apt`
 - `ansible-playbook`
 
-`agentctl notify`는 Unix domain socket을 통해 알림 전송을 `agentd`에
-위임합니다. Telegram과 Discord 프로파일 credential은 agentctl config가
+`agentctl telegram notify`와 `agentctl discord notify`는 Unix domain socket을 통해
+알림 전송을 `agentd`에 위임합니다. Telegram과 Discord 프로파일 credential은 agentctl config가
 아니라 `/etc/agentkit/agentd.toml`에 설정합니다. Telegram의 `chat_id` 같은
 목적지는 notify 실행 시 파라미터로 전달합니다.
 

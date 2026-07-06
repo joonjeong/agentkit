@@ -122,8 +122,8 @@ sudo /usr/local/sbin/agentctl service stop tailscale
 sudo /usr/local/sbin/agentctl service reload cloudflared
 sudo /usr/local/sbin/agentctl service status cloudflared
 sudo /usr/local/sbin/agentctl logs hermes --lines 200 # systemd only
-sudo /usr/local/sbin/agentctl notify telegram myriad --chat-id 123456789 --severity critical --message "disk full"
-sudo /usr/local/sbin/agentctl notify discord myriad --title "Hermes" --message "service degraded"
+sudo /usr/local/sbin/agentctl telegram notify myriad --chat-id 123456789 --severity critical --message "disk full"
+sudo /usr/local/sbin/agentctl discord notify myriad --title "Hermes" --message "service degraded"
 sudo /usr/local/sbin/agentctl config check
 sudo /usr/local/sbin/agentctl config explain
 sudo /usr/local/sbin/agentctl config explain --config-path ./config.toml
@@ -139,8 +139,8 @@ Rejected command families are intentionally absent:
 - raw `apt`
 - `ansible-playbook`
 
-`agentctl notify` delegates notification delivery to `agentd` over its Unix
-domain socket. Configure Telegram and Discord profile credentials in
+`agentctl telegram notify` and `agentctl discord notify` delegate notification
+delivery to `agentd` over its Unix domain socket. Configure Telegram and Discord profile credentials in
 `/etc/agentkit/agentd.toml`, not in the agentctl config. Telegram destinations
 such as `chat_id` are passed per notify invocation.
 

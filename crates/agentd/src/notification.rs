@@ -45,6 +45,7 @@ pub(crate) struct DiscordProfile {
 
 pub(crate) struct Notification<'a> {
     pub(crate) caller: &'a str,
+    pub(crate) provider: &'a str,
     pub(crate) profile: &'a str,
     pub(crate) severity: Severity,
     pub(crate) title: Option<&'a str>,
@@ -237,8 +238,9 @@ fn format_notification(notification: &Notification<'_>) -> String {
     match notification.title {
         Some(title) => lines.push(format!("[{}] {title}", notification.severity.as_str())),
         None => lines.push(format!(
-            "[{}] agentctl notify",
-            notification.severity.as_str()
+            "[{}] agentctl {} notify",
+            notification.severity.as_str(),
+            notification.provider
         )),
     }
     lines.push(format!("caller: {}", notification.caller));

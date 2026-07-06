@@ -1,12 +1,12 @@
 ---
 name: agent-workflow
-description: Run agent commands through agent-session provider sessions so app-auth credentials stay scoped to the child process.
+description: Run agent commands through agentctl provider sessions so app-auth credentials stay scoped to the child process.
 ---
 
 # Agent Workflow
 
 Use this skill when an agent needs temporary provider credentials for a command
-without exporting long-lived secrets into the parent shell. `agent-session` is a
+without exporting long-lived secrets into the parent shell. `agentctl github-app run` is a
 provider-scoped session runner: it asks `agentd` for an app-auth context,
 injects the short-lived credential into one child process, and then lets the
 process exit normally.
@@ -14,7 +14,7 @@ process exit normally.
 The current provider is GitHub App authentication:
 
 ```sh
-agent-session github-app run [OPTIONS] -- COMMAND [ARG]...
+agentctl github-app run [OPTIONS] -- COMMAND [ARG]...
 agentd config check --config-path /etc/agentkit/agentd.toml
 ```
 
@@ -31,31 +31,31 @@ runs.
 
 On a node that runs multiple agents, give each agent a distinct provider profile
 and set the profile selector in that agent's service environment. For GitHub App
-sessions, use `AGENT_SESSION_GITHUB_PROFILE`. `agent-session` does not read private
+sessions, use `AGENTCTL_GITHUB_PROFILE`. `agentctl` does not read private
 keys or provider config; it only talks to the local broker socket.
 
 ## GitHub App Sessions
 
-Use `agent-session github-app run ... -- COMMAND` for ordinary GitHub work:
+Use `agentctl github-app run ... -- COMMAND` for ordinary GitHub work:
 
 ```sh
-AGENT_SESSION_GITHUB_PROFILE=codex-review \
-/usr/local/bin/agent-session github-app run \
+AGENTCTL_GITHUB_PROFILE=codex-review \
+/usr/local/sbin/agentctl github-app run \
   -- gh pr view 123 --repo OWNER/REPO
 ```
 
 Use `--git-credentials` for HTTPS Git operations:
 
 ```sh
-AGENT_SESSION_GITHUB_PROFILE=codex-maintainer \
-/usr/local/bin/agent-session github-app run \
+AGENTCTL_GITHUB_PROFILE=codex-maintainer \
+/usr/local/sbin/agentctl github-app run \
   --git-credentials \
   -- git remote update
 ```
 
 Profile selection should normally come from the process environment:
 
-- `AGENT_SESSION_GITHUB_PROFILE`
+- `AGENTCTL_GITHUB_PROFILE`
 
 Use `--profile NAME` only for one-off overrides.
 
@@ -68,7 +68,7 @@ outside the selected profile's configured scope:
 ## Agent Workflow
 
 1. Select the narrowest provider profile for the current agent and task.
-2. Run provider CLIs or Git commands through `agent-session ... run -- COMMAND`.
+2. Run provider CLIs or Git commands through `agentctl github-app run -- COMMAND`.
 3. Keep shell syntax explicit. Pipes, redirects, aliases, variables, and grouped
    commands require an explicit shell command.
 4. Add provider-specific helpers only when needed, such as `--git-credentials`
@@ -78,7 +78,7 @@ outside the selected profile's configured scope:
 For shell syntax:
 
 ```sh
-agent-session github-app run \
+agentctl github-app run \
   --repo OWNER/REPO \
   -- sh -c 'gh pr view "$1" --repo "$2" --json title,url | jq .url' sh 123 OWNER/REPO
 ```
@@ -98,7 +98,7 @@ PATH, and ordinary environment variables.
 
 ## Operational Notes
 
-- Treat `agent-session` as a boundary tool: secrets in agentd config, temporary
+- Treat `agentctl github-app run` as a boundary tool: secrets in agentd config, temporary
   credentials in one child process.
 - Scope tokens as narrowly as the provider allows.
 - Request only the permissions needed by the child command.

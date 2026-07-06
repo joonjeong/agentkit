@@ -19,7 +19,7 @@ const AGENTD_WIRE_PROTOCOL_VERSION: u32 = 1;
 #[command(
     about = "GitHub App-backed operations session commands",
     after_long_help = "Invocation forms:
-  agent-session github-app run [OPTIONS] -- COMMAND [ARG]..."
+  agentctl github-app run [OPTIONS] -- COMMAND [ARG]..."
 )]
 pub struct GithubAppArgs {
     #[command(subcommand)]
@@ -42,19 +42,19 @@ Use this command from coding agents or automation that need temporary GitHub rep
   Request a GitHub App installation token from agentd and run a command with GH_TOKEN and GITHUB_TOKEN set for that process.
 
 Invocation forms:
-  agent-session github-app run [OPTIONS] -- COMMAND [ARG]...
+  agentctl github-app run [OPTIONS] -- COMMAND [ARG]...
 
 Examples:
-  agent-session github-app run \\
+  agentctl github-app run \\
     --repo OWNER/REPO \\
     -- gh pr comment 123 --body \"Done\"
 
 Environment:
-  AGENT_SESSION_AGENTD_SOCKET
-  AGENT_SESSION_GITHUB_PROFILE
+  AGENTCTL_AGENTD_SOCKET
+  AGENTCTL_GITHUB_PROFILE
 
 Repository scoping:
-  Set AGENT_SESSION_GITHUB_PROFILE as the default profile selector for agent services. Use --profile NAME only for one-off overrides. Use --repo OWNER/REPO to request a subset of the selected profile's repository list. Repeat --repo for multiple repositories. agentd validates requested repositories and permissions against its system-wide profile before minting a token.
+  Set AGENTCTL_GITHUB_PROFILE as the default profile selector for agent services. Use --profile NAME only for one-off overrides. Use --repo OWNER/REPO to request a subset of the selected profile's repository list. Repeat --repo for multiple repositories. agentd validates requested repositories and permissions against its system-wide profile before minting a token.
 
 Execution:
   The command after -- is run directly with GH_TOKEN and GITHUB_TOKEN set to the temporary installation token. GitHub App credential environment variables are removed from the child environment. The child process inherits stdin, stdout, stderr, working directory, PATH, and other ordinary environment variables. Shell syntax such as pipes, redirects, aliases, and shell functions requires an explicit shell command, for example -- sh -c 'gh issue view 123 | jq .url'.
@@ -66,16 +66,16 @@ pub struct GithubSessionArgs {
     /// agentd Unix domain socket path.
     #[arg(
         long,
-        env = "AGENT_SESSION_AGENTD_SOCKET",
+        env = "AGENTCTL_AGENTD_SOCKET",
         default_value = DEFAULT_AGENTD_SOCKET_PATH
     )]
     agentd_socket: PathBuf,
 
     /// One-off GitHub App profile override.
     ///
-    /// Prefer AGENT_SESSION_GITHUB_PROFILE as the default profile selector for
+    /// Prefer AGENTCTL_GITHUB_PROFILE as the default profile selector for
     /// long-running agent services.
-    #[arg(long, env = "AGENT_SESSION_GITHUB_PROFILE")]
+    #[arg(long, env = "AGENTCTL_GITHUB_PROFILE")]
     profile: Option<String>,
 
     /// Scope the token to a repository.
@@ -280,7 +280,7 @@ struct GitCredentialEnvironment {
 impl GitCredentialEnvironment {
     fn create(api_url: &str) -> Result<Self> {
         let host = git_credential_host(api_url)?;
-        let temp_dir = unique_temp_dir("agent-session-git-credentials");
+        let temp_dir = unique_temp_dir("agentctl-git-credentials");
         let mut builder = fs::DirBuilder::new();
         #[cfg(unix)]
         {
@@ -291,7 +291,7 @@ impl GitCredentialEnvironment {
             .create(&temp_dir)
             .with_context(|| format!("failed to create {}", temp_dir.display()))?;
 
-        let helper_path = temp_dir.join("git-credential-agent-session");
+        let helper_path = temp_dir.join("git-credential-agentctl");
         fs::write(&helper_path, git_credential_helper_script(&host))
             .with_context(|| format!("failed to write {}", helper_path.display()))?;
 

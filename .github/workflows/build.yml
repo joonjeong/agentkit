@@ -22,7 +22,7 @@ on:
       binary_name:
         description: "Cargo binary name to build and package."
         required: false
-        default: "agent-session"
+        default: "agentctl"
         type: string
       ref:
         description: "Optional Git ref or SHA to check out."

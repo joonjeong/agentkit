@@ -95,6 +95,7 @@ fn handle_request(request: WireRequest, config: &AgentdConfigFile) -> Result<Wir
             WireRequest::validate_version(version)?;
             let notification = Notification {
                 caller: &caller,
+                provider: &provider,
                 profile: &profile,
                 severity,
                 title: title.as_deref(),

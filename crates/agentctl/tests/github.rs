@@ -16,20 +16,19 @@ static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[test]
 fn shows_top_level_help() {
-    let mut cmd = Command::cargo_bin("agent-session").expect("binary exists");
+    let mut cmd = Command::cargo_bin("agentctl").expect("binary exists");
 
     cmd.arg("--help").assert().success().stdout(
         predicate::str::contains("github-app")
-            .and(predicate::str::contains("agent-session"))
-            .and(predicate::str::contains(
-                "agent-session github-app run [OPTIONS]",
-            )),
+            .and(predicate::str::contains("agentctl"))
+            .and(predicate::str::contains("service"))
+            .and(predicate::str::contains("telegram")),
     );
 }
 
 #[test]
 fn shows_version() {
-    let mut cmd = Command::cargo_bin("agent-session").expect("binary exists");
+    let mut cmd = Command::cargo_bin("agentctl").expect("binary exists");
     let assert = cmd.arg("--version").assert().success();
 
     if let Some(agentkit_version) = option_env!("AGENTKIT_VERSION") {
@@ -43,23 +42,22 @@ fn shows_version() {
 }
 
 #[test]
-fn shows_agent_session_agent_usage() {
-    let mut cmd = Command::cargo_bin("agent-session").expect("binary exists");
+fn shows_github_app_usage() {
+    let mut cmd = Command::cargo_bin("agentctl").expect("binary exists");
 
-    cmd.arg("--help").assert().success().stdout(
-        predicate::str::contains("Run a command in an authenticated operations session").and(
-            predicate::str::contains("agent-session github-app run [OPTIONS]"),
-        ),
-    );
+    cmd.arg("--help")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("github-app").and(predicate::str::contains("agentctl")));
 
-    let mut github = Command::cargo_bin("agent-session").expect("binary exists");
+    let mut github = Command::cargo_bin("agentctl").expect("binary exists");
     github
         .args(["github-app", "run", "--help"])
         .assert()
         .success()
         .stdout(
             predicate::str::contains("Request a GitHub App installation token from agentd")
-                .and(predicate::str::contains("agent-session"))
+                .and(predicate::str::contains("agentctl"))
                 .and(predicate::str::contains("GH_TOKEN"))
                 .and(predicate::str::contains("GITHUB_TOKEN"))
                 .and(predicate::str::contains("--git-credentials"))
@@ -70,24 +68,24 @@ fn shows_agent_session_agent_usage() {
 
 #[cfg(unix)]
 #[test]
-fn agent_session_symlink_style_help_does_not_duplicate_subcommand_name() {
-    let mut cmd = std::process::Command::new(assert_cmd::cargo::cargo_bin("agent-session"));
-    cmd.arg0("agent-session");
+fn agentctl_symlink_style_help_does_not_duplicate_subcommand_name() {
+    let mut cmd = std::process::Command::new(assert_cmd::cargo::cargo_bin("agentctl"));
+    cmd.arg0("agentctl");
 
     let output = cmd.arg("--help").output().expect("command runs");
     assert!(output.status.success());
 
     let stdout = String::from_utf8(output.stdout).expect("stdout is utf-8");
-    assert!(stdout.contains("Usage: agent-session <COMMAND>"));
-    assert!(!stdout.contains("agent-session agent-session [OPTIONS]"));
+    assert!(stdout.contains("Usage: agentctl <COMMAND>"));
+    assert!(!stdout.contains("agentctl agentctl [OPTIONS]"));
 }
 
 #[cfg(unix)]
 #[test]
-fn agent_session_runs_command_with_installation_token_environment() {
+fn agentctl_runs_command_with_installation_token_environment() {
     let (socket_dir, socket_path, server) =
         agentd_token_response_server("test-token", "https://api.github.com");
-    let mut cmd = Command::cargo_bin("agent-session").expect("binary exists");
+    let mut cmd = Command::cargo_bin("agentctl").expect("binary exists");
 
     cmd.args([
         "github-app",
@@ -120,13 +118,13 @@ fn agent_session_runs_command_with_installation_token_environment() {
 
 #[cfg(unix)]
 #[test]
-fn agent_session_can_configure_child_only_git_credentials() {
+fn agentctl_can_configure_child_only_git_credentials() {
     let api_url = "http://127.0.0.1:1";
     let (socket_dir, socket_path, server) = agentd_token_response_server("test-token", api_url);
-    let output_dir = unique_temp_dir("agent-session-git-credentials-test");
+    let output_dir = unique_temp_dir("agentctl-git-credentials-test");
     fs::create_dir(&output_dir).expect("temporary output directory created");
     let output_file = output_dir.join("credentials");
-    let mut cmd = Command::cargo_bin("agent-session").expect("binary exists");
+    let mut cmd = Command::cargo_bin("agentctl").expect("binary exists");
 
     cmd.args([
         "github-app",
@@ -175,10 +173,10 @@ fn agent_session_can_configure_child_only_git_credentials() {
 
 #[cfg(unix)]
 #[test]
-fn agent_session_exits_with_child_exit_code() {
+fn agentctl_exits_with_child_exit_code() {
     let (socket_dir, socket_path, server) =
         agentd_token_response_server("test-token", "https://api.github.com");
-    let mut cmd = Command::cargo_bin("agent-session").expect("binary exists");
+    let mut cmd = Command::cargo_bin("agentctl").expect("binary exists");
 
     cmd.args([
         "github-app",
@@ -201,10 +199,10 @@ fn agent_session_exits_with_child_exit_code() {
 
 #[cfg(unix)]
 #[test]
-fn agent_session_uses_named_config_profile() {
+fn agentctl_uses_named_config_profile() {
     let (socket_dir, socket_path, server) =
         agentd_token_response_server("test-token", "https://api.github.com");
-    let mut cmd = Command::cargo_bin("agent-session").expect("binary exists");
+    let mut cmd = Command::cargo_bin("agentctl").expect("binary exists");
 
     cmd.args([
         "github-app",
@@ -234,9 +232,9 @@ fn agent_session_uses_named_config_profile() {
 
 #[cfg(unix)]
 #[test]
-fn agent_session_reports_agentd_error() {
+fn agentctl_reports_agentd_error() {
     let (socket_dir, socket_path, server) = agentd_error_response_server("repo is not allowed");
-    let mut cmd = Command::cargo_bin("agent-session").expect("binary exists");
+    let mut cmd = Command::cargo_bin("agentctl").expect("binary exists");
 
     cmd.args([
         "github-app",
@@ -260,10 +258,10 @@ fn agent_session_reports_agentd_error() {
 
 #[cfg(unix)]
 #[test]
-fn agent_session_exits_with_child_signal_status() {
+fn agentctl_exits_with_child_signal_status() {
     let (socket_dir, socket_path, server) =
         agentd_token_response_server("test-token", "https://api.github.com");
-    let mut cmd = Command::cargo_bin("agent-session").expect("binary exists");
+    let mut cmd = Command::cargo_bin("agentctl").expect("binary exists");
 
     cmd.args([
         "github-app",
@@ -285,8 +283,8 @@ fn agent_session_exits_with_child_signal_status() {
 }
 
 #[test]
-fn agent_session_requires_command_after_separator() {
-    let mut cmd = Command::cargo_bin("agent-session").expect("binary exists");
+fn agentctl_requires_command_after_separator() {
+    let mut cmd = Command::cargo_bin("agentctl").expect("binary exists");
 
     cmd.args(["github-app", "run", "--repo", "OWNER/REPO"])
         .assert()
@@ -295,12 +293,12 @@ fn agent_session_requires_command_after_separator() {
 }
 
 #[test]
-fn agent_session_accepts_command_options_after_separator() {
+fn agentctl_accepts_command_options_after_separator() {
     #[cfg(unix)]
     {
         let (socket_dir, socket_path, server) =
             agentd_token_response_server("test-token", "https://api.github.com");
-        let mut cmd = Command::cargo_bin("agent-session").expect("binary exists");
+        let mut cmd = Command::cargo_bin("agentctl").expect("binary exists");
 
         cmd.args([
             "github-app",
@@ -328,7 +326,7 @@ fn agent_session_accepts_command_options_after_separator() {
 
     #[cfg(not(unix))]
     {
-        let mut cmd = Command::cargo_bin("agent-session").expect("binary exists");
+        let mut cmd = Command::cargo_bin("agentctl").expect("binary exists");
         cmd.args([
             "github-app",
             "run",
@@ -394,7 +392,7 @@ fn agentd_response_server(
     std::path::PathBuf,
     thread::JoinHandle<String>,
 ) {
-    let socket_dir = unique_temp_dir("agent-session-agentd-test");
+    let socket_dir = unique_temp_dir("agentctl-agentd-test");
     fs::create_dir(&socket_dir).expect("socket dir created");
     let socket_path = socket_dir.join("agentd.sock");
     let listener = UnixListener::bind(&socket_path).expect("agentd test socket binds");

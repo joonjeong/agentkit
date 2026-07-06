@@ -9,7 +9,6 @@ This repository is a Cargo workspace for small, focused tools:
 ```text
 crates/
   agentd/       local credential broker for agent tools
-  agent-session/  GitHub App-backed command session runner
   agentctl/  config-driven restricted executor for homelab operations
 ```
 
@@ -17,7 +16,6 @@ Build individual tools with Cargo:
 
 ```sh
 cargo build --release --bin agentd
-cargo build --release --bin agent-session
 cargo build --release --bin agentctl
 ```
 
@@ -54,22 +52,22 @@ agentd config check --config-path /etc/agentkit/agentd.toml
 agentd serve --config-path /etc/agentkit/agentd.toml --socket-path /run/agentd/agentd.sock
 ```
 
-## agent-session
+## agentctl GitHub App Sessions
 
-`agent-session` runs a child command inside a short-lived GitHub App installation
+`agentctl github-app run` runs a child command inside a short-lived GitHub App installation
 token context obtained from `agentd`. For now, GitHub App authentication is the
 only supported session provider.
 
 ```sh
-agent-session github-app run \
+agentctl github-app run \
   --profile codex-review \
   --repo OWNER/REPO \
   -- git remote update
 ```
 
-GitHub App credential material is not read by `agent-session`. Keep private keys
-in the system-wide `agentd` config and set `AGENT_SESSION_GITHUB_PROFILE` in each
-agent's service environment. `agent-session` requests a profile-scoped token from
+GitHub App credential material is not read by `agentctl`. Keep private keys
+in the system-wide `agentd` config and set `AGENTCTL_GITHUB_PROFILE` in each
+agent's service environment. `agentctl` requests a profile-scoped token from
 `agentd`; `agentd` validates requested repositories and permissions against its
 configured profile before minting the token.
 
@@ -78,7 +76,7 @@ environment variables are removed from the child environment. Shell syntax such
 as pipes or redirects requires an explicit shell:
 
 ```sh
-agent-session github-app run \
+agentctl github-app run \
   --profile codex-review \
   --repo OWNER/REPO \
   -- sh -c 'gh issue view 123 | jq .url'
@@ -88,7 +86,7 @@ Git HTTPS remotes need `--git-credentials` so the child process gets a
 temporary Git credential helper:
 
 ```sh
-agent-session github-app run \
+agentctl github-app run \
   --profile codex-review \
   --repo OWNER/REPO \
   --permission contents=read \
@@ -98,7 +96,6 @@ agent-session github-app run \
 
 Validate broker configuration with `agentd config check`.
 
-See [crates/agent-session/README.md](crates/agent-session/README.md).
 See [crates/agentd/README.md](crates/agentd/README.md) for the broker config
 schema and UDS wire protocol.
 
@@ -117,7 +114,7 @@ sudo /usr/local/sbin/agentctl service stop tailscale
 sudo /usr/local/sbin/agentctl service reload cloudflared
 sudo /usr/local/sbin/agentctl service status cloudflared
 sudo /usr/local/sbin/agentctl logs hermes --lines 200
-sudo /usr/local/sbin/agentctl notify telegram myriad --chat-id 123456789 --severity critical --message "disk full"
+sudo /usr/local/sbin/agentctl telegram notify myriad --chat-id 123456789 --severity critical --message "disk full"
 sudo /usr/local/sbin/agentctl config check
 sudo /usr/local/sbin/agentctl config explain
 sudo /usr/local/sbin/agentctl config explain --config-path ./config.toml
@@ -129,7 +126,7 @@ See [crates/agentctl/README.md](crates/agentctl/README.md).
 ## Releases
 
 The release workflow creates HeadVer-tagged GitHub releases with
-`agentd` and `agent-session` binaries for `x86_64-unknown-linux-musl`,
+`agentd` and `agentctl` binaries for `x86_64-unknown-linux-musl`,
 `aarch64-unknown-linux-musl`, and `aarch64-apple-darwin`. Linux assets are
 statically linked musl binaries so they do not depend on the host system's
 glibc version.

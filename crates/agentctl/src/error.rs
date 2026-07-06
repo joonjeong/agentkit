@@ -31,6 +31,9 @@ pub enum Error {
     #[error("invalid notification option: {0}")]
     InvalidNotificationOption(String),
 
+    #[error("github app session error: {0}")]
+    GithubAppSession(String),
+
     #[error("agentd rejected request: {0}")]
     AgentdRejected(String),
 

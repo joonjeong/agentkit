@@ -79,7 +79,7 @@ fn config_explain_dumps_validated_config() {
                 .and(predicate::str::contains("service restart hermes"))
                 .and(predicate::str::contains("service status cloudflared"))
                 .and(predicate::str::contains("logs tailscale"))
-                .and(predicate::str::contains("notify telegram myriad").not()),
+                .and(predicate::str::contains("telegram notify myriad").not()),
         );
 
     fs::remove_dir_all(temp).expect("temporary directory removed");
@@ -252,8 +252,8 @@ fn notify_posts_to_allowlisted_telegram_channel() {
     Command::cargo_bin("agentctl")
         .expect("binary exists")
         .args([
-            "notify",
             "telegram",
+            "notify",
             "myriad",
             "--chat-id",
             "123456789",
@@ -319,8 +319,8 @@ service_read = ["hermes"]
     Command::cargo_bin("agentctl")
         .expect("binary exists")
         .args([
-            "notify",
             "discord",
+            "notify",
             "myriad",
             "--severity",
             "warning",
@@ -362,8 +362,8 @@ fn notify_reports_agentd_rejection() {
     Command::cargo_bin("agentctl")
         .expect("binary exists")
         .args([
-            "notify",
             "telegram",
+            "notify",
             "other",
             "--chat-id",
             "123456789",
@@ -626,7 +626,8 @@ fn bootstrap_installs_binary_and_writes_configurable_files() {
     assert!(sudoers_contents.contains("Defaults:%custom-agent"));
     assert!(sudoers_contents.contains(&format!("logfile=\"{}\"", sudo_log.display())));
     assert!(sudoers_contents.contains(&format!("{} service restart *", binary.display())));
-    assert!(sudoers_contents.contains(&format!("{} notify *", binary.display())));
+    assert!(sudoers_contents.contains(&format!("{} telegram notify *", binary.display())));
+    assert!(sudoers_contents.contains(&format!("{} discord notify *", binary.display())));
     assert!(sudoers_contents.contains(&format!("{} config check *", binary.display())));
     assert!(sudoers_contents.contains(&format!("{} config explain", binary.display())));
     assert!(sudoers_contents.contains(&format!("{} config explain *", binary.display())));

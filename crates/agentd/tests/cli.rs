@@ -245,8 +245,9 @@ fn serve_once_sends_discord_notification_over_uds() {
     let request = fs::read_to_string(&record_path).expect("notification recorded");
     assert!(request.contains("channel=myriad"));
     assert!(request.contains("url=https://discord.test/webhook"));
-    assert!(request
-        .contains(r#""content":"[warning] agentctl notify\ncaller: hermes\nservice degraded""#));
+    assert!(request.contains(
+        r#""content":"[warning] agentctl discord notify\ncaller: hermes\nservice degraded""#
+    ));
 
     fs::remove_dir_all(config_dir).expect("config dir removed");
 }

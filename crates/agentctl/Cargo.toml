@@ -6,8 +6,10 @@ license.workspace = true
 description = "Config-driven restricted executor for homelab operations"
 
 [dependencies]
+anyhow = "1.0.100"
 clap = { version = "4.5.53", features = ["derive", "env"] }
 libc = "0.2.186"
+reqwest = { version = "0.12.24", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 thiserror = "2.0.17"
