@@ -582,7 +582,7 @@ fn bootstrap_installs_binary_and_writes_configurable_files() {
     let temp = temp_dir("agentctl-bootstrap");
     let source_binary = temp.join("source/agentctl");
     let binary = temp.join("bin/agentctl");
-    let sudoers = temp.join("sudoers/custom-ops-agent");
+    let sudoers = temp.join("sudoers/custom-agent");
     let config = temp.join("etc/config.toml");
     let audit_log = temp.join("logs/audit.log");
     let sudo_log = temp.join("logs/sudo.log");
@@ -599,7 +599,7 @@ fn bootstrap_installs_binary_and_writes_configurable_files() {
             "--source-binary",
             source_binary.to_str().expect("utf-8 path"),
             "--group",
-            "custom-ops",
+            "custom-agent",
             "--binary-path",
             binary.to_str().expect("utf-8 path"),
             "--sudoers-path",
@@ -623,7 +623,7 @@ fn bootstrap_installs_binary_and_writes_configurable_files() {
         b"fake agentctl binary"
     );
     let sudoers_contents = fs::read_to_string(&sudoers).expect("sudoers written");
-    assert!(sudoers_contents.contains("Defaults:%custom-ops"));
+    assert!(sudoers_contents.contains("Defaults:%custom-agent"));
     assert!(sudoers_contents.contains(&format!("logfile=\"{}\"", sudo_log.display())));
     assert!(sudoers_contents.contains(&format!("{} service restart *", binary.display())));
     assert!(sudoers_contents.contains(&format!("{} notify *", binary.display())));
@@ -665,7 +665,7 @@ fn bootstrap_can_write_openrc_default_config() {
     let temp = temp_dir("agentctl-bootstrap-openrc");
     let source_binary = temp.join("source/agentctl");
     let binary = temp.join("bin/agentctl");
-    let sudoers = temp.join("sudoers/ops-agent");
+    let sudoers = temp.join("sudoers/agent");
     let config = temp.join("etc/config.toml");
     let audit_log = temp.join("logs/audit.log");
     let sudo_log = temp.join("logs/sudo.log");
@@ -793,8 +793,10 @@ fn write_recorder(dir: &Path, name: &str) -> PathBuf {
     path
 }
 
-const SAMPLE_CONFIG: &str = include_str!("../resources/examples/config/systemd.example.toml");
-const OPENRC_CONFIG: &str = include_str!("../resources/examples/config/openrc.example.toml");
+const SAMPLE_CONFIG: &str =
+    include_str!("../../../resources/agentctl/examples/config/systemd.example.toml");
+const OPENRC_CONFIG: &str =
+    include_str!("../../../resources/agentctl/examples/config/openrc.example.toml");
 const TELEGRAM_NOTIFY_CONFIG: &str = r#"
 version = 1
 

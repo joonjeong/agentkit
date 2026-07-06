@@ -1,6 +1,6 @@
 # Example agentctl config for systemd hosts.
 #
-# Runtime config is installed to /etc/agentctl/config.toml. Edit that file
+# Runtime config is installed to /etc/agentkit/agentctl.toml. Edit that file
 # on each host after bootstrap. This example keeps one caller and a small
 # service allowlist.
 

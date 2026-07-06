@@ -9,7 +9,7 @@ use serde::Deserialize;
 use crate::error::{Error, Result};
 use crate::policy::{validate_caller, validate_target, Action};
 
-pub const DEFAULT_CONFIG_PATH: &str = "/etc/agentctl/config.toml";
+pub const DEFAULT_CONFIG_PATH: &str = "/etc/agentkit/agentctl.toml";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]

@@ -1,6 +1,6 @@
 # Example agentctl config for OpenRC hosts.
 #
-# Runtime config is installed to /etc/agentctl/config.toml. Edit that file
+# Runtime config is installed to /etc/agentkit/agentctl.toml. Edit that file
 # on each host after bootstrap. This example keeps one caller and a small
 # service allowlist. The OpenRC backend supports service control and status;
 # logs return an explicit unsupported-backend error.

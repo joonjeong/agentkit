@@ -11,7 +11,7 @@ agent-session github-app run \
 
 GitHub credentials and provider profiles are read by `agentd`, not by
 `agent-session`. Configure profile names, repository scope, permissions, and
-private key sources in `/etc/agentd/config.toml`; see
+private key sources in `/etc/agentkit/agentd.toml`; see
 [agentd](../agentd/README.md) for the config schema and wire protocol.
 
 `AGENT_SESSION_GITHUB_PROFILE` is the default way to select the agentd profile for
@@ -57,5 +57,5 @@ in automation.
 Validate the broker config when needed:
 
 ```sh
-agentd config check --config-path /etc/agentd/config.toml
+agentd config check --config-path /etc/agentkit/agentd.toml
 ```

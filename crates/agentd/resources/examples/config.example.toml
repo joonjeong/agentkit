@@ -2,8 +2,8 @@
 api_url = "https://api.github.com"
 default_profile = "codex-review"
 
-# agentd reads system-wide config from /etc/agentd/config.toml.
-# For shared agent hosts, place private keys under /etc/agentd/secrets
+# agentd reads system-wide config from /etc/agentkit/agentd.toml.
+# For shared agent hosts, place private keys under /etc/agentkit/secrets
 # with permissions such as root:agentd 0640, and run agentd as a user in
 # that group.
 
@@ -13,7 +13,7 @@ repos = ["OWNER/REPO"]
 
 [github_app.profiles.codex-review.private_key]
 type = "file"
-path = "/etc/agentd/secrets/codex-review-github-app.private-key.pem"
+path = "/etc/agentkit/secrets/codex-review-github-app.private-key.pem"
 
 [github_app.profiles.codex-review.permissions]
 contents = "read"
@@ -26,7 +26,7 @@ repos = ["OWNER/REPO"]
 
 [github_app.profiles.codex-maintainer.private_key]
 type = "file"
-path = "/etc/agentd/secrets/codex-maintainer-github-app.private-key.pem"
+path = "/etc/agentkit/secrets/codex-maintainer-github-app.private-key.pem"
 
 [github_app.profiles.codex-maintainer.permissions]
 contents = "write"
@@ -41,7 +41,7 @@ installation_id = 987654
 [github_app.profiles.hermes-release.private_key]
 type = "command"
 command = "/usr/bin/op"
-args = ["read", "op://ops/github-apps/hermes-release/private-key"]
+args = ["read", "op://agentkit/github-apps/hermes-release/private-key"]
 
 [github_app.profiles.hermes-release.permissions]
 contents = "write"
@@ -49,7 +49,7 @@ pull_requests = "write"
 actions = "write"
 
 [telegram.profiles.myriad]
-bot_token_file = "/etc/agentd/secrets/telegram-bot-token"
+bot_token_file = "/etc/agentkit/secrets/telegram-bot-token"
 
 [discord.profiles.myriad]
-webhook_url_file = "/etc/agentd/secrets/discord-webhook-url"
+webhook_url_file = "/etc/agentkit/secrets/discord-webhook-url"

@@ -11,11 +11,12 @@ use crate::error::{Error, Result};
 use crate::policy::validate_caller;
 
 const DEFAULT_BINARY_PATH: &str = "/usr/local/sbin/agentctl";
-const DEFAULT_GROUP: &str = "ops-agent";
+const DEFAULT_GROUP: &str = "agent";
 const DEFAULT_LOGROTATE_PATH: &str = "/etc/logrotate.d/agentctl";
-const DEFAULT_SUDOERS_PATH: &str = "/etc/sudoers.d/ops-agent";
+const DEFAULT_SUDOERS_PATH: &str = "/etc/sudoers.d/agent";
 const DEFAULT_SUDO_LOG_PATH: &str = "/var/log/agentctl/sudo.log";
-const SUDOERS_TEMPLATE: &str = include_str!("../resources/templates/sudoers.ops-agent.template");
+const SUDOERS_TEMPLATE: &str =
+    include_str!("../../../resources/agentctl/templates/sudoers.agent.template");
 
 #[derive(Debug, Args)]
 pub struct BootstrapArgs {
@@ -378,8 +379,12 @@ fn logrotate_contents(audit_log_path: &Path, sudo_log_path: &Path) -> String {
 
 pub(crate) fn sample_config(backend: Backend) -> String {
     match backend {
-        Backend::Systemd => include_str!("../resources/examples/config/systemd.example.toml"),
-        Backend::Openrc => include_str!("../resources/examples/config/openrc.example.toml"),
+        Backend::Systemd => {
+            include_str!("../../../resources/agentctl/examples/config/systemd.example.toml")
+        }
+        Backend::Openrc => {
+            include_str!("../../../resources/agentctl/examples/config/openrc.example.toml")
+        }
     }
     .to_owned()
 }

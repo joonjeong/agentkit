@@ -20,16 +20,16 @@ sudo ./agentctl bootstrap --user hermes
 `bootstrap` configures the local host:
 
 - installs the current binary to `/usr/local/sbin/agentctl`
-- creates the `ops-agent` system group when missing
-- adds existing `--user` accounts to `ops-agent`
-- creates `/etc/agentctl/config.toml` when missing
-- writes `/etc/sudoers.d/ops-agent`
+- creates the `agent` system group when missing
+- adds existing `--user` accounts to `agent`
+- creates `/etc/agentkit/agentctl.toml` when missing
+- writes `/etc/sudoers.d/agent`
 - creates log paths under `/var/log/agentctl`
 - writes `/etc/logrotate.d/agentctl`
 
-The generated sudoers rule allows `ops-agent` members to run only the operational
+The generated sudoers rule allows `agent` members to run only the operational
 subcommands. It does not allow agents to run `bootstrap`. The rule is rendered
-from `crates/agentctl/resources/templates/sudoers.ops-agent.template`.
+from `resources/agentctl/templates/sudoers.agent.template`.
 
 ## Build
 
@@ -60,9 +60,9 @@ sudo ./agentctl bootstrap \
   --source-binary /path/to/agentctl \
   --binary-path /usr/local/sbin/agentctl \
   --backend systemd \
-  --group ops-agent \
-  --sudoers-path /etc/sudoers.d/ops-agent \
-  --config-path /etc/agentctl/config.toml \
+  --group agent \
+  --sudoers-path /etc/sudoers.d/agent \
+  --config-path /etc/agentkit/agentctl.toml \
   --audit-log-path /var/log/agentctl/audit.log \
   --sudo-log-path /var/log/agentctl/sudo.log \
   --logrotate-path /etc/logrotate.d/agentctl
@@ -141,7 +141,7 @@ Rejected command families are intentionally absent:
 
 `agentctl notify` delegates notification delivery to `agentd` over its Unix
 domain socket. Configure Telegram and Discord profile credentials in
-`/etc/agentd/config.toml`, not in the agentctl config. Telegram destinations
+`/etc/agentkit/agentd.toml`, not in the agentctl config. Telegram destinations
 such as `chat_id` are passed per notify invocation.
 
 ## Verification
@@ -160,7 +160,7 @@ sudo /usr/local/sbin/agentctl config explain
 AGENTCTL_CONFIG_PATH=./config.toml agentctl config explain
 ```
 
-The default config path is `/etc/agentctl/config.toml`. Use
+The default config path is `/etc/agentkit/agentctl.toml`. Use
 `--config-path` with `config check` or `config explain`, or set
 `AGENTCTL_CONFIG_PATH`, to inspect another config file.
 

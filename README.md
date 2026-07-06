@@ -1,4 +1,4 @@
-# ops tools
+# agent tools
 
 Operational tools packaged as Rust binaries.
 
@@ -40,7 +40,7 @@ repos = ["OWNER/REPO"]
 
 [github_app.profiles.codex-review.private_key]
 type = "file"
-path = "/etc/agentd/secrets/codex-review-github-app.private-key.pem"
+path = "/etc/agentkit/secrets/codex-review-github-app.private-key.pem"
 
 [github_app.profiles.codex-review.permissions]
 contents = "read"
@@ -50,8 +50,8 @@ pull_requests = "read"
 Validate and run the broker with:
 
 ```sh
-agentd config check --config-path /etc/agentd/config.toml
-agentd serve --config-path /etc/agentd/config.toml --socket-path /run/agentd/agentd.sock
+agentd config check --config-path /etc/agentkit/agentd.toml
+agentd serve --config-path /etc/agentkit/agentd.toml --socket-path /run/agentd/agentd.sock
 ```
 
 ## agent-session

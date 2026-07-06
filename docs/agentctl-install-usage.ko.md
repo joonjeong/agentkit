@@ -20,16 +20,16 @@ sudo ./agentctl bootstrap --user hermes
 `bootstrap`은 대상 호스트를 구성합니다.
 
 - 현재 바이너리를 `/usr/local/sbin/agentctl`에 설치
-- `ops-agent` 시스템 그룹이 없으면 생성
-- `--user`로 지정한 기존 계정을 `ops-agent` 그룹에 추가
-- `/etc/agentctl/config.toml`이 없으면 기본 config 생성
-- `/etc/sudoers.d/ops-agent` 생성
+- `agent` 시스템 그룹이 없으면 생성
+- `--user`로 지정한 기존 계정을 `agent` 그룹에 추가
+- `/etc/agentkit/agentctl.toml`이 없으면 기본 config 생성
+- `/etc/sudoers.d/agent` 생성
 - `/var/log/agentctl` 아래 로그 경로 생성
 - `/etc/logrotate.d/agentctl` 생성
 
-생성되는 sudoers 규칙은 `ops-agent` 멤버에게 운영 서브커맨드만 허용합니다.
+생성되는 sudoers 규칙은 `agent` 멤버에게 운영 서브커맨드만 허용합니다.
 에이전트가 `bootstrap`을 실행할 수는 없습니다. 이 규칙은
-`crates/agentctl/resources/templates/sudoers.ops-agent.template`에서 렌더링됩니다.
+`resources/agentctl/templates/sudoers.agent.template`에서 렌더링됩니다.
 
 ## 빌드
 
@@ -60,9 +60,9 @@ sudo ./agentctl bootstrap \
   --source-binary /path/to/agentctl \
   --binary-path /usr/local/sbin/agentctl \
   --backend systemd \
-  --group ops-agent \
-  --sudoers-path /etc/sudoers.d/ops-agent \
-  --config-path /etc/agentctl/config.toml \
+  --group agent \
+  --sudoers-path /etc/sudoers.d/agent \
+  --config-path /etc/agentkit/agentctl.toml \
   --audit-log-path /var/log/agentctl/audit.log \
   --sudo-log-path /var/log/agentctl/sudo.log \
   --logrotate-path /etc/logrotate.d/agentctl
@@ -141,7 +141,7 @@ sudo /usr/local/sbin/agentctl version
 
 `agentctl notify`는 Unix domain socket을 통해 알림 전송을 `agentd`에
 위임합니다. Telegram과 Discord 프로파일 credential은 agentctl config가
-아니라 `/etc/agentd/config.toml`에 설정합니다. Telegram의 `chat_id` 같은
+아니라 `/etc/agentkit/agentd.toml`에 설정합니다. Telegram의 `chat_id` 같은
 목적지는 notify 실행 시 파라미터로 전달합니다.
 
 ## 확인
@@ -160,7 +160,7 @@ sudo /usr/local/sbin/agentctl config explain
 AGENTCTL_CONFIG_PATH=./config.toml agentctl config explain
 ```
 
-기본 config 경로는 `/etc/agentctl/config.toml`입니다. 다른 파일을
+기본 config 경로는 `/etc/agentkit/agentctl.toml`입니다. 다른 파일을
 확인하려면 `config check`와 `config explain`에서 `--config-path`를
 지정하거나 `AGENTCTL_CONFIG_PATH` 환경변수를 사용할 수 있습니다.
 

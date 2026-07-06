@@ -9,7 +9,7 @@ Discord notification delivery.
 
 ## Configuration
 
-`agentd` reads system-wide config from `/etc/agentd/config.toml` by default:
+`agentd` reads system-wide config from `/etc/agentkit/agentd.toml` by default:
 
 ```toml
 [github_app]
@@ -22,24 +22,24 @@ repos = ["OWNER/REPO"]
 
 [github_app.profiles.codex-review.private_key]
 type = "file"
-path = "/etc/agentd/secrets/codex-review-github-app.private-key.pem"
+path = "/etc/agentkit/secrets/codex-review-github-app.private-key.pem"
 
 [github_app.profiles.codex-review.permissions]
 contents = "read"
 pull_requests = "read"
 
 [telegram.profiles.myriad]
-bot_token_file = "/etc/agentd/secrets/telegram-bot-token"
+bot_token_file = "/etc/agentkit/secrets/telegram-bot-token"
 
 [discord.profiles.myriad]
-webhook_url_file = "/etc/agentd/secrets/discord-webhook-url"
+webhook_url_file = "/etc/agentkit/secrets/discord-webhook-url"
 ```
 
 Validate and run the broker with:
 
 ```sh
-agentd config check --config-path /etc/agentd/config.toml
-agentd serve --config-path /etc/agentd/config.toml --socket-path /run/agentd/agentd.sock
+agentd config check --config-path /etc/agentkit/agentd.toml
+agentd serve --config-path /etc/agentkit/agentd.toml --socket-path /run/agentd/agentd.sock
 ```
 
 Print the full example config with:

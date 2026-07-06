@@ -15,7 +15,7 @@ The current provider is GitHub App authentication:
 
 ```sh
 agent-session github-app run [OPTIONS] -- COMMAND [ARG]...
-agentd config check --config-path /etc/agentd/config.toml
+agentd config check --config-path /etc/agentkit/agentd.toml
 ```
 
 Future providers should follow the same boundary: provider credentials come from
@@ -25,7 +25,7 @@ or the ambient environment.
 
 ## Configuration
 
-`agentd` reads system-wide provider settings from `/etc/agentd/config.toml`.
+`agentd` reads system-wide provider settings from `/etc/agentkit/agentd.toml`.
 Use `agentd config check --config-path PATH` for local checks and development
 runs.
 

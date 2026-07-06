@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use clap::{Args, Parser, Subcommand};
 
-const DEFAULT_CONFIG_PATH: &str = "/etc/agentd/config.toml";
+const DEFAULT_CONFIG_PATH: &str = "/etc/agentkit/agentd.toml";
 const DEFAULT_SOCKET_PATH: &str = "/run/agentd/agentd.sock";
 
 const VERSION: &str = match option_env!("AGENTKIT_VERSION") {
