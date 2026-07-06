@@ -6,7 +6,7 @@ use clap::{Parser, Subcommand};
 
 use crate::github;
 
-const VERSION: &str = match option_env!("AGENT_SESSION_VERSION") {
+const VERSION: &str = match option_env!("AGENTKIT_VERSION") {
     Some(version) => version,
     None => env!("CARGO_PKG_VERSION"),
 };

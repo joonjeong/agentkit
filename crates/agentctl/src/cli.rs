@@ -12,7 +12,7 @@ use crate::notification::{self, Notification, Severity};
 use crate::policy::{is_allowed, validate_target, Action};
 use crate::runner;
 
-const VERSION: &str = match option_env!("AGENTCTL_VERSION") {
+const VERSION: &str = match option_env!("AGENTKIT_VERSION") {
     Some(version) => version,
     None => env!("CARGO_PKG_VERSION"),
 };

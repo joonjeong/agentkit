@@ -12,7 +12,7 @@ use clap::{Args, Parser, Subcommand};
 const DEFAULT_CONFIG_PATH: &str = "/etc/agentd/config.toml";
 const DEFAULT_SOCKET_PATH: &str = "/run/agentd/agentd.sock";
 
-const VERSION: &str = match option_env!("AGENTD_VERSION") {
+const VERSION: &str = match option_env!("AGENTKIT_VERSION") {
     Some(version) => version,
     None => env!("CARGO_PKG_VERSION"),
 };

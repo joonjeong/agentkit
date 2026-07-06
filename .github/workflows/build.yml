@@ -73,9 +73,7 @@ jobs:
       - name: Build
         env:
           BUILD_TOOL: ${{ inputs.build_tool }}
-          AGENT_SESSION_VERSION: ${{ inputs.release_version }}
-          AGENTD_VERSION: ${{ inputs.release_version }}
-          AGENTCTL_VERSION: ${{ inputs.release_version }}
+          AGENTKIT_VERSION: ${{ inputs.release_version }}
           BINARY_NAME: ${{ inputs.binary_name }}
         run: |
           if [[ "${BUILD_TOOL}" == "cargo-zigbuild" ]]; then

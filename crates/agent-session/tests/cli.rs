@@ -32,10 +32,10 @@ fn shows_version() {
     let mut cmd = Command::cargo_bin("agent-session").expect("binary exists");
     let assert = cmd.arg("--version").assert().success();
 
-    if let Some(agent_session_version) = option_env!("AGENT_SESSION_VERSION") {
+    if let Some(agentkit_version) = option_env!("AGENTKIT_VERSION") {
         assert.stdout(
             predicate::str::contains(env!("CARGO_PKG_VERSION"))
-                .or(predicate::str::contains(agent_session_version)),
+                .or(predicate::str::contains(agentkit_version)),
         );
     } else {
         assert.stdout(predicate::str::contains(env!("CARGO_PKG_VERSION")));
