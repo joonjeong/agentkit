@@ -52,8 +52,8 @@ fn bootstrap_installs_binary_and_writes_default_config() {
     );
     let config_contents = fs::read_to_string(&config).expect("config written");
     assert!(config_contents.contains("[github_app]"));
-    assert!(config_contents.contains("[telegram.profiles.myriad]"));
-    assert!(config_contents.contains("[discord.profiles.myriad]"));
+    assert!(config_contents.contains("[telegram.profiles.myriad.token]"));
+    assert!(config_contents.contains("[discord.profiles.myriad.webhook]"));
     let service_contents = fs::read_to_string(service).expect("service written");
     assert!(service_contents.contains("[Service]"));
     assert!(service_contents.contains(&format!(
@@ -266,7 +266,6 @@ fn serve_once_sends_telegram_notification_over_uds() {
         .env("AGENTD_TEST_OVERRIDES", "1")
         .env("AGENTD_TELEGRAM_API_BASE", "https://telegram.test")
         .env("AGENTD_NOTIFICATION_RECORD_PATH", &record_path)
-        .env("AGENTD_TEST_TELEGRAM_TOKEN", "telegram-token")
         .spawn()
         .expect("agentd starts");
 
@@ -317,10 +316,6 @@ fn serve_once_sends_discord_notification_over_uds() {
         ])
         .env("AGENTD_TEST_OVERRIDES", "1")
         .env("AGENTD_NOTIFICATION_RECORD_PATH", &record_path)
-        .env(
-            "AGENTD_TEST_DISCORD_WEBHOOK",
-            "https://discord.test/webhook",
-        )
         .spawn()
         .expect("agentd starts");
 
@@ -379,12 +374,19 @@ fn github_token_response_server() -> (String, thread::JoinHandle<String>) {
 fn write_config(config_dir: &std::path::Path, api_url: &str) -> std::path::PathBuf {
     let private_key_path = config_dir.join("private-key.pem");
     fs::write(&private_key_path, TEST_RSA_PRIVATE_KEY).expect("private key written");
+    let telegram_token_path = config_dir.join("telegram-token");
+    fs::write(&telegram_token_path, "telegram-token").expect("telegram token written");
+    let discord_webhook_path = config_dir.join("discord-webhook");
+    fs::write(&discord_webhook_path, "https://discord.test/webhook")
+        .expect("discord webhook written");
     let config_path = config_dir.join("config.toml");
     fs::write(
         &config_path,
         format!(
-            "[github_app]\napi_url = \"{api_url}\"\ndefault_profile = \"default\"\n\n[github_app.profiles.default]\napp_id = 1\ninstallation_id = 42\nrepos = [\"OWNER/REPO\"]\n\n[github_app.profiles.default.private_key]\ntype = \"file\"\npath = \"{}\"\n\n[github_app.profiles.default.permissions]\ncontents = \"read\"\n\n[telegram.profiles.myriad]\nbot_token_env = \"AGENTD_TEST_TELEGRAM_TOKEN\"\n\n[discord.profiles.myriad]\nwebhook_url_env = \"AGENTD_TEST_DISCORD_WEBHOOK\"\n",
-            private_key_path.to_string_lossy()
+            "[github_app]\napi_url = \"{api_url}\"\ndefault_profile = \"default\"\n\n[github_app.profiles.default]\napp_id = 1\ninstallation_id = 42\nrepos = [\"OWNER/REPO\"]\n\n[github_app.profiles.default.private_key]\ntype = \"file\"\npath = \"{}\"\n\n[github_app.profiles.default.permissions]\ncontents = \"read\"\n\n[telegram.profiles.myriad.token]\ntype = \"file\"\npath = \"{}\"\n\n[discord.profiles.myriad.webhook]\ntype = \"file\"\npath = \"{}\"\n",
+            private_key_path.to_string_lossy(),
+            telegram_token_path.to_string_lossy(),
+            discord_webhook_path.to_string_lossy()
         ),
     )
     .expect("config written");

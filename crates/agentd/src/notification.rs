@@ -1,5 +1,6 @@
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
+use std::process::Command;
 use std::time::Duration;
 
 use anyhow::{anyhow, Context, Result};
@@ -32,15 +33,26 @@ impl Severity {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct TelegramProfile {
-    pub(crate) bot_token_env: Option<String>,
-    pub(crate) bot_token_file: Option<PathBuf>,
+    pub(crate) token: SecretSource,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct DiscordProfile {
-    pub(crate) webhook_url_env: Option<String>,
-    pub(crate) webhook_url_file: Option<PathBuf>,
+    pub(crate) webhook: SecretSource,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type", rename_all = "lowercase", deny_unknown_fields)]
+pub(crate) enum SecretSource {
+    File {
+        path: PathBuf,
+    },
+    Command {
+        command: PathBuf,
+        #[serde(default)]
+        args: Vec<String>,
+    },
 }
 
 pub(crate) struct Notification<'a> {
@@ -53,18 +65,13 @@ pub(crate) struct Notification<'a> {
 }
 
 pub(crate) fn validate_telegram_profile(name: &str, profile: &TelegramProfile) -> Result<()> {
-    validate_secret_ref(
-        &format!("telegram.profiles.{name}.bot_token"),
-        profile.bot_token_env.as_deref(),
-        profile.bot_token_file.as_deref(),
-    )
+    validate_secret_source(&format!("telegram.profiles.{name}.token"), &profile.token)
 }
 
 pub(crate) fn validate_discord_profile(name: &str, profile: &DiscordProfile) -> Result<()> {
-    validate_secret_ref(
-        &format!("discord.profiles.{name}.webhook_url"),
-        profile.webhook_url_env.as_deref(),
-        profile.webhook_url_file.as_deref(),
+    validate_secret_source(
+        &format!("discord.profiles.{name}.webhook"),
+        &profile.webhook,
     )
 }
 
@@ -107,11 +114,7 @@ pub(crate) fn send_telegram(
                 notification.profile
             )
         })?;
-    let token = read_secret(
-        "telegram bot token",
-        profile.bot_token_env.as_deref(),
-        profile.bot_token_file.as_deref(),
-    )?;
+    let token = read_secret("telegram bot token", &profile.token)?;
     let base_url = if cfg!(debug_assertions) && std::env::var_os("AGENTD_TEST_OVERRIDES").is_some()
     {
         std::env::var("AGENTD_TELEGRAM_API_BASE")
@@ -143,11 +146,7 @@ pub(crate) fn send_discord(
                 notification.profile
             )
         })?;
-    let url = read_secret(
-        "discord webhook url",
-        profile.webhook_url_env.as_deref(),
-        profile.webhook_url_file.as_deref(),
-    )?;
+    let url = read_secret("discord webhook url", &profile.webhook)?;
     let payload = DiscordPayload {
         content: &format_notification(notification),
     };
@@ -207,14 +206,29 @@ fn http_error_reason(status: StatusCode, body: &str) -> String {
     }
 }
 
-fn read_secret(name: &str, env: Option<&str>, file: Option<&Path>) -> Result<String> {
-    let value = match (env, file) {
-        (Some(env), None) => {
-            std::env::var(env).with_context(|| format!("{name} env var is not set: {env}"))?
+fn read_secret(name: &str, source: &SecretSource) -> Result<String> {
+    let value = match source {
+        SecretSource::File { path } => fs::read_to_string(path)
+            .with_context(|| format!("failed to read {name} from {}", path.display()))?,
+        SecretSource::Command { command, args } => {
+            let output = Command::new(command)
+                .args(args)
+                .output()
+                .with_context(|| format!("failed to run {name} command {}", command.display()))?;
+            if !output.status.success() {
+                return Err(anyhow!(
+                    "{name} command {} exited with {}",
+                    command.display(),
+                    output.status
+                ));
+            }
+            String::from_utf8(output.stdout).with_context(|| {
+                format!(
+                    "{name} command {} returned non-UTF-8 stdout",
+                    command.display()
+                )
+            })?
         }
-        (None, Some(file)) => fs::read_to_string(file)
-            .with_context(|| format!("failed to read {}", file.display()))?,
-        _ => return Err(anyhow!("{name} must configure exactly one secret source")),
     };
     let value = value.trim().to_owned();
     if value.is_empty() {
@@ -223,13 +237,17 @@ fn read_secret(name: &str, env: Option<&str>, file: Option<&Path>) -> Result<Str
     Ok(value)
 }
 
-fn validate_secret_ref(name: &str, env: Option<&str>, file: Option<&Path>) -> Result<()> {
-    match (env, file) {
-        (Some(env), None) if !env.trim().is_empty() => Ok(()),
-        (None, Some(file)) if file.is_absolute() => Ok(()),
-        (Some(_), Some(_)) => Err(anyhow!("{name} must use either env or file, not both")),
-        (None, Some(file)) => Err(anyhow!("{name}_file must be absolute: {}", file.display())),
-        _ => Err(anyhow!("{name} must configure env or file")),
+fn validate_secret_source(name: &str, source: &SecretSource) -> Result<()> {
+    match source {
+        SecretSource::File { path } if path.is_absolute() => Ok(()),
+        SecretSource::File { path } => {
+            Err(anyhow!("{name}.path must be absolute: {}", path.display()))
+        }
+        SecretSource::Command { command, .. } if command.is_absolute() => Ok(()),
+        SecretSource::Command { command, .. } => Err(anyhow!(
+            "{name}.command must be absolute: {}",
+            command.display()
+        )),
     }
 }
 

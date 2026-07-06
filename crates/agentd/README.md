@@ -28,11 +28,13 @@ path = "/etc/agentkit/secrets/codex-review-github-app.private-key.pem"
 contents = "read"
 pull_requests = "read"
 
-[telegram.profiles.myriad]
-bot_token_file = "/etc/agentkit/secrets/telegram-bot-token"
+[telegram.profiles.myriad.token]
+type = "file"
+path = "/etc/agentkit/secrets/telegram-bot-token"
 
-[discord.profiles.myriad]
-webhook_url_file = "/etc/agentkit/secrets/discord-webhook-url"
+[discord.profiles.myriad.webhook]
+type = "file"
+path = "/etc/agentkit/secrets/discord-webhook-url"
 ```
 
 Validate and run the broker with:
@@ -98,6 +100,8 @@ Successful notification response:
 
 Notification profiles live under `[telegram.profiles.<name>]` and
 `[discord.profiles.<name>]` in the agentd config. Telegram profiles require
-either `bot_token_file` or `bot_token_env`; `chat_id` is supplied per notify
-request. Discord profiles require either `webhook_url_file` or
-`webhook_url_env`.
+`[telegram.profiles.<name>.token]`; `chat_id` is supplied per notify request.
+Discord profiles require `[discord.profiles.<name>.webhook]`. Notification
+secrets use the same typed source shape as GitHub App private keys:
+`type = "file"` with `path`, or `type = "command"` with `command` and optional
+`args`.
