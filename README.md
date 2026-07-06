@@ -113,7 +113,7 @@ sudo /usr/local/sbin/agentctl service start cloudflared
 sudo /usr/local/sbin/agentctl service stop tailscale
 sudo /usr/local/sbin/agentctl service reload cloudflared
 sudo /usr/local/sbin/agentctl service status cloudflared
-sudo /usr/local/sbin/agentctl logs hermes --lines 200
+sudo /usr/local/sbin/agentctl service logs hermes --lines 200
 sudo /usr/local/sbin/agentctl telegram notify myriad --chat-id 123456789 --severity critical --message "disk full"
 sudo /usr/local/sbin/agentctl config check
 sudo /usr/local/sbin/agentctl config explain

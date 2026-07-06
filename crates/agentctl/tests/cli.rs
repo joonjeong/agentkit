@@ -78,7 +78,7 @@ fn config_explain_dumps_validated_config() {
                 .and(predicate::str::contains("service stop hermes"))
                 .and(predicate::str::contains("service restart hermes"))
                 .and(predicate::str::contains("service status cloudflared"))
-                .and(predicate::str::contains("logs tailscale"))
+                .and(predicate::str::contains("service logs tailscale"))
                 .and(predicate::str::contains("telegram notify myriad").not()),
         );
 
@@ -459,7 +459,7 @@ fn openrc_logs_are_explicitly_unsupported() {
 
     Command::cargo_bin("agentctl")
         .expect("binary exists")
-        .args(["logs", "hermes", "--lines", "200"])
+        .args(["service", "logs", "hermes", "--lines", "200"])
         .env("AGENTCTL_TEST_OVERRIDES", "1")
         .env("AGENTCTL_CONFIG_PATH", &config)
         .env("AGENTCTL_AUDIT_LOG", &audit)
@@ -542,7 +542,7 @@ fn logs_rejects_line_count_above_config_maximum() {
 
     Command::cargo_bin("agentctl")
         .expect("binary exists")
-        .args(["logs", "hermes", "--lines", "999999"])
+        .args(["service", "logs", "hermes", "--lines", "999999"])
         .env("AGENTCTL_TEST_OVERRIDES", "1")
         .env("AGENTCTL_CONFIG_PATH", &config)
         .env("AGENTCTL_AUDIT_LOG", &audit)
@@ -626,6 +626,7 @@ fn bootstrap_installs_binary_and_writes_configurable_files() {
     assert!(sudoers_contents.contains("Defaults:%custom-agent"));
     assert!(sudoers_contents.contains(&format!("logfile=\"{}\"", sudo_log.display())));
     assert!(sudoers_contents.contains(&format!("{} service restart *", binary.display())));
+    assert!(sudoers_contents.contains(&format!("{} service logs *", binary.display())));
     assert!(sudoers_contents.contains(&format!("{} telegram notify *", binary.display())));
     assert!(sudoers_contents.contains(&format!("{} discord notify *", binary.display())));
     assert!(sudoers_contents.contains(&format!("{} config check *", binary.display())));

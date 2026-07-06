@@ -35,8 +35,6 @@ enum Command {
     Bootstrap(BootstrapArgs),
     /// Manage allowlisted services.
     Service(ServiceCommand),
-    /// Show allowlisted service logs.
-    Logs(LogsArgs),
     /// GitHub App-backed command session commands.
     #[command(name = "github-app")]
     GithubApp(github::GithubAppArgs),
@@ -68,6 +66,8 @@ enum ServiceSubcommand {
     Reload(TargetArgs),
     /// Show status for an allowlisted service.
     Status(TargetArgs),
+    /// Show allowlisted service logs.
+    Logs(LogsArgs),
 }
 
 #[derive(Debug, Args)]
@@ -231,8 +231,10 @@ where
             ServiceSubcommand::Status(args) => {
                 execute(Action::ServiceStatus, &args.service, None, &config_path)
             }
+            ServiceSubcommand::Logs(args) => {
+                execute(Action::Logs, &args.service, Some(args.lines), &config_path)
+            }
         },
-        Command::Logs(args) => execute(Action::Logs, &args.service, Some(args.lines), &config_path),
         Command::GithubApp(args) => {
             github::github_app(args)
                 .map_err(|error| Error::GithubAppSession(format!("{error:#}")))?;
@@ -322,7 +324,7 @@ fn explain_config(config_path: &Path) -> Result<i32> {
         for service in &caller_policy.service_read {
             println!("      service status {service}");
             if config.backend() == crate::config::Backend::Systemd {
-                println!("      logs {service}");
+                println!("      service logs {service}");
             }
         }
     }

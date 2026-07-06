@@ -13,7 +13,7 @@ sudo /usr/local/sbin/agentctl service start cloudflared
 sudo /usr/local/sbin/agentctl service stop tailscale
 sudo /usr/local/sbin/agentctl service reload cloudflared
 sudo /usr/local/sbin/agentctl service status cloudflared
-sudo /usr/local/sbin/agentctl logs hermes --lines 200
+sudo /usr/local/sbin/agentctl service logs hermes --lines 200
 sudo /usr/local/sbin/agentctl telegram notify myriad --chat-id 123456789 --severity critical --message "disk full"
 sudo /usr/local/sbin/agentctl config check
 sudo /usr/local/sbin/agentctl config explain
@@ -58,7 +58,7 @@ sudoers rule is rendered from
 The generated sudoers rule grants only:
 
 ```sudoers
-%agent ALL=(root) NOPASSWD: /usr/local/sbin/agentctl service start *, /usr/local/sbin/agentctl service stop *, /usr/local/sbin/agentctl service restart *, /usr/local/sbin/agentctl service reload *, /usr/local/sbin/agentctl service status *, /usr/local/sbin/agentctl logs *, /usr/local/sbin/agentctl telegram notify *, /usr/local/sbin/agentctl discord notify *, /usr/local/sbin/agentctl config check, /usr/local/sbin/agentctl config check *, /usr/local/sbin/agentctl config explain, /usr/local/sbin/agentctl config explain *, /usr/local/sbin/agentctl version
+%agent ALL=(root) NOPASSWD: /usr/local/sbin/agentctl service start *, /usr/local/sbin/agentctl service stop *, /usr/local/sbin/agentctl service restart *, /usr/local/sbin/agentctl service reload *, /usr/local/sbin/agentctl service status *, /usr/local/sbin/agentctl service logs *, /usr/local/sbin/agentctl telegram notify *, /usr/local/sbin/agentctl discord notify *, /usr/local/sbin/agentctl config check, /usr/local/sbin/agentctl config check *, /usr/local/sbin/agentctl config explain, /usr/local/sbin/agentctl config explain *, /usr/local/sbin/agentctl version
 ```
 
 Useful bootstrap options:
