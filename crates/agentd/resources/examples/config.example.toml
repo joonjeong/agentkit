@@ -40,8 +40,8 @@ installation_id = 987654
 
 [github_app.profiles.hermes-release.private_key]
 type = "command"
-command = "/usr/bin/op"
-args = ["read", "op://agentkit/github-apps/hermes-release/private-key"]
+command = "/usr/bin/bw"
+args = ["get", "notes", "github-app-hermes-release-private-key"]
 
 [github_app.profiles.hermes-release.permissions]
 contents = "write"

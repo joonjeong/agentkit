@@ -51,7 +51,7 @@ generated sudoers rule.
 creates the `agent` group, adds existing `--user` accounts to the group,
 writes the default config, writes sudoers, and writes logrotate config. The
 sudoers rule is rendered from
-`resources/agentctl/templates/sudoers.agent.template`.
+`crates/agentctl/resources/templates/sudoers.agent.template`.
 
 The generated sudoers rule grants only:
 

@@ -29,7 +29,7 @@ sudo ./agentctl bootstrap --user hermes
 
 The generated sudoers rule allows `agent` members to run only the operational
 subcommands. It does not allow agents to run `bootstrap`. The rule is rendered
-from `resources/agentctl/templates/sudoers.agent.template`.
+from `crates/agentctl/resources/templates/sudoers.agent.template`.
 
 ## Build
 

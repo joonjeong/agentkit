@@ -29,7 +29,7 @@ sudo ./agentctl bootstrap --user hermes
 
 생성되는 sudoers 규칙은 `agent` 멤버에게 운영 서브커맨드만 허용합니다.
 에이전트가 `bootstrap`을 실행할 수는 없습니다. 이 규칙은
-`resources/agentctl/templates/sudoers.agent.template`에서 렌더링됩니다.
+`crates/agentctl/resources/templates/sudoers.agent.template`에서 렌더링됩니다.
 
 ## 빌드
 

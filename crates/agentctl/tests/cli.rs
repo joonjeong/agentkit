@@ -793,10 +793,8 @@ fn write_recorder(dir: &Path, name: &str) -> PathBuf {
     path
 }
 
-const SAMPLE_CONFIG: &str =
-    include_str!("../../../resources/agentctl/examples/config/systemd.example.toml");
-const OPENRC_CONFIG: &str =
-    include_str!("../../../resources/agentctl/examples/config/openrc.example.toml");
+const SAMPLE_CONFIG: &str = include_str!("../resources/examples/config/systemd.example.toml");
+const OPENRC_CONFIG: &str = include_str!("../resources/examples/config/openrc.example.toml");
 const TELEGRAM_NOTIFY_CONFIG: &str = r#"
 version = 1
 

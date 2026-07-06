@@ -15,8 +15,8 @@ const DEFAULT_GROUP: &str = "agent";
 const DEFAULT_LOGROTATE_PATH: &str = "/etc/logrotate.d/agentctl";
 const DEFAULT_SUDOERS_PATH: &str = "/etc/sudoers.d/agent";
 const DEFAULT_SUDO_LOG_PATH: &str = "/var/log/agentctl/sudo.log";
-const SUDOERS_TEMPLATE: &str =
-    include_str!("../../../resources/agentctl/templates/sudoers.agent.template");
+const LOGROTATE_TEMPLATE: &str = include_str!("../resources/templates/logrotate.agentctl.template");
+const SUDOERS_TEMPLATE: &str = include_str!("../resources/templates/sudoers.agent.template");
 
 #[derive(Debug, Args)]
 pub struct BootstrapArgs {
@@ -362,29 +362,14 @@ fn sudoers_contents(args: &BootstrapArgs) -> String {
 }
 
 fn logrotate_contents(audit_log_path: &Path, sudo_log_path: &Path) -> String {
-    format!(
-        r#"{} {} {{
-    weekly
-    rotate 8
-    compress
-    missingok
-    notifempty
-    create 0640 root root
-}}
-"#,
-        audit_log_path.display(),
-        sudo_log_path.display()
-    )
+    LOGROTATE_TEMPLATE
+        .replace("{audit_log}", &audit_log_path.display().to_string())
+        .replace("{sudo_log}", &sudo_log_path.display().to_string())
 }
 
-pub(crate) fn sample_config(backend: Backend) -> String {
+pub(crate) fn sample_config(backend: Backend) -> &'static str {
     match backend {
-        Backend::Systemd => {
-            include_str!("../../../resources/agentctl/examples/config/systemd.example.toml")
-        }
-        Backend::Openrc => {
-            include_str!("../../../resources/agentctl/examples/config/openrc.example.toml")
-        }
+        Backend::Systemd => include_str!("../resources/examples/config/systemd.example.toml"),
+        Backend::Openrc => include_str!("../resources/examples/config/openrc.example.toml"),
     }
-    .to_owned()
 }
