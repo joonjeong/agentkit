@@ -15,14 +15,14 @@ on:
         description: "Build command driver, either cargo or cargo-zigbuild."
         required: true
         type: string
-      ops_session_version:
-        description: "OPS_SESSION_VERSION value embedded by the build."
+      agent_session_version:
+        description: "AGENT_SESSION_VERSION value embedded by the build."
         required: true
         type: string
       binary_name:
         description: "Cargo binary name to build and package."
         required: false
-        default: "ops-session"
+        default: "agent-session"
         type: string
       ref:
         description: "Optional Git ref or SHA to check out."
@@ -73,8 +73,8 @@ jobs:
       - name: Build
         env:
           BUILD_TOOL: ${{ inputs.build_tool }}
-          OPS_SESSION_VERSION: ${{ inputs.ops_session_version }}
-          AGENTD_VERSION: ${{ inputs.ops_session_version }}
+          AGENT_SESSION_VERSION: ${{ inputs.agent_session_version }}
+          AGENTD_VERSION: ${{ inputs.agent_session_version }}
           BINARY_NAME: ${{ inputs.binary_name }}
         run: |
           if [[ "${BUILD_TOOL}" == "cargo-zigbuild" ]]; then

@@ -6,19 +6,19 @@ This repository is a Rust workspace for small, focused operational binaries that
 are easy to distribute through GitHub releases.
 
 Prefer independent crates under `crates/` over shared multiplexing binaries.
-Each tool should own its command surface directly, like `ops-session` and
+Each tool should own its command surface directly, like `agent-session` and
 `ops-runbook`.
 
 ## Current Tool Surface
 
-`ops-session` runs a child command inside a short-lived GitHub App installation
+`agent-session` runs a child command inside a short-lived GitHub App installation
 token context:
 
 ```sh
-ops-session github-app run ... -- COMMAND [ARG]...
+agent-session github-app run ... -- COMMAND [ARG]...
 ```
 
-Prefer `ops-session github-app run ... -- COMMAND` for normal agent GitHub work
+Prefer `agent-session github-app run ... -- COMMAND` for normal agent GitHub work
 so tokens are injected only into the child process.
 GitHub App private key paths are read from the GitHub config file, not from
 arguments or environment variables.

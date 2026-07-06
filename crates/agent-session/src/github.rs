@@ -12,9 +12,9 @@ use clap::{Args, Subcommand};
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 
-const OPS_SESSION_WORKFLOW_SKILL_NAME: &str = "ops-session-workflow";
-const OPS_SESSION_WORKFLOW_SKILL: &str =
-    include_str!("../resources/skills/ops-session-workflow/SKILL.md");
+const AGENT_SESSION_WORKFLOW_SKILL_NAME: &str = "agent-session-workflow";
+const AGENT_SESSION_WORKFLOW_SKILL: &str =
+    include_str!("../resources/skills/agent-session-workflow/SKILL.md");
 const DEFAULT_AGENTD_SOCKET_PATH: &str = "/run/agentd/agentd.sock";
 const AGENTD_WIRE_PROTOCOL_VERSION: u32 = 1;
 
@@ -22,7 +22,7 @@ const AGENTD_WIRE_PROTOCOL_VERSION: u32 = 1;
 #[command(
     about = "GitHub App-backed operations session commands",
     after_long_help = "Invocation forms:
-  ops-session github-app run [OPTIONS] -- COMMAND [ARG]..."
+  agent-session github-app run [OPTIONS] -- COMMAND [ARG]..."
 )]
 pub struct GithubAppArgs {
     #[command(subcommand)]
@@ -45,19 +45,19 @@ Use this command from coding agents or automation that need temporary GitHub rep
   Request a GitHub App installation token from agentd and run a command with GH_TOKEN and GITHUB_TOKEN set for that process.
 
 Invocation forms:
-  ops-session github-app run [OPTIONS] -- COMMAND [ARG]...
+  agent-session github-app run [OPTIONS] -- COMMAND [ARG]...
 
 Examples:
-  ops-session github-app run \\
+  agent-session github-app run \\
     --repo OWNER/REPO \\
     -- gh pr comment 123 --body \"Done\"
 
 Environment:
-  OPS_SESSION_AGENTD_SOCKET
-  OPS_SESSION_GITHUB_PROFILE
+  AGENT_SESSION_AGENTD_SOCKET
+  AGENT_SESSION_GITHUB_PROFILE
 
 Repository scoping:
-  Set OPS_SESSION_GITHUB_PROFILE as the default profile selector for agent services. Use --profile NAME only for one-off overrides. Use --repo OWNER/REPO to request a subset of the selected profile's repository list. Repeat --repo for multiple repositories. agentd validates requested repositories and permissions against its system-wide profile before minting a token.
+  Set AGENT_SESSION_GITHUB_PROFILE as the default profile selector for agent services. Use --profile NAME only for one-off overrides. Use --repo OWNER/REPO to request a subset of the selected profile's repository list. Repeat --repo for multiple repositories. agentd validates requested repositories and permissions against its system-wide profile before minting a token.
 
 Execution:
   The command after -- is run directly with GH_TOKEN and GITHUB_TOKEN set to the temporary installation token. GitHub App credential environment variables are removed from the child environment. The child process inherits stdin, stdout, stderr, working directory, PATH, and other ordinary environment variables. Shell syntax such as pipes, redirects, aliases, and shell functions requires an explicit shell command, for example -- sh -c 'gh issue view 123 | jq .url'.
@@ -69,16 +69,16 @@ pub struct GithubSessionArgs {
     /// agentd Unix domain socket path.
     #[arg(
         long,
-        env = "OPS_SESSION_AGENTD_SOCKET",
+        env = "AGENT_SESSION_AGENTD_SOCKET",
         default_value = DEFAULT_AGENTD_SOCKET_PATH
     )]
     agentd_socket: PathBuf,
 
     /// One-off GitHub App profile override.
     ///
-    /// Prefer OPS_SESSION_GITHUB_PROFILE as the default profile selector for
+    /// Prefer AGENT_SESSION_GITHUB_PROFILE as the default profile selector for
     /// long-running agent services.
-    #[arg(long, env = "OPS_SESSION_GITHUB_PROFILE")]
+    #[arg(long, env = "AGENT_SESSION_GITHUB_PROFILE")]
     profile: Option<String>,
 
     /// Scope the token to a repository.
@@ -115,13 +115,13 @@ pub struct GithubSessionArgs {
 
 #[derive(Debug, Args)]
 #[command(
-    about = "Create the ops-session agent workflow skill",
-    long_about = "Create the bundled ops-session-workflow skill under a target skills directory.
+    about = "Create the agent-session agent workflow skill",
+    long_about = "Create the bundled agent-session-workflow skill under a target skills directory.
 
-The command writes INSTALL_PATH/ops-session-workflow/SKILL.md. Use it to install the agent-facing workflow guidance next to Codex, Hermes, or another agent's skill directory without copying files manually.",
+The command writes INSTALL_PATH/agent-session-workflow/SKILL.md. Use it to install the agent-facing workflow guidance next to Codex, Hermes, or another agent's skill directory without copying files manually.",
     after_long_help = "Examples:
-  ops-session agent-skill --install-path ~/.codex/skills
-  ops-session agent-skill -i ./skills --force
+  agent-session agent-skill --install-path ~/.codex/skills
+  agent-session agent-skill -i ./skills --force
 
 Output:
   Prints the created skill directory path."
@@ -129,7 +129,7 @@ Output:
 pub struct AppAgentWorkflowSkillArgs {
     /// Directory where the skill folder should be created.
     ///
-    /// The command creates <INSTALL_PATH>/ops-session-workflow/SKILL.md.
+    /// The command creates <INSTALL_PATH>/agent-session-workflow/SKILL.md.
     #[arg(long, short = 'i', value_name = "INSTALL_PATH")]
     install_path: PathBuf,
 
@@ -245,7 +245,7 @@ fn validate_agentd_wire_version(version: u32) -> Result<()> {
 }
 
 pub fn create_app_agent_workflow_skill(args: AppAgentWorkflowSkillArgs) -> Result<()> {
-    let skill_dir = args.install_path.join(OPS_SESSION_WORKFLOW_SKILL_NAME);
+    let skill_dir = args.install_path.join(AGENT_SESSION_WORKFLOW_SKILL_NAME);
     let skill_file = skill_dir.join("SKILL.md");
 
     if skill_file.exists() && !args.force {
@@ -257,7 +257,7 @@ pub fn create_app_agent_workflow_skill(args: AppAgentWorkflowSkillArgs) -> Resul
 
     fs::create_dir_all(&skill_dir)
         .with_context(|| format!("failed to create {}", skill_dir.display()))?;
-    fs::write(&skill_file, OPS_SESSION_WORKFLOW_SKILL)
+    fs::write(&skill_file, AGENT_SESSION_WORKFLOW_SKILL)
         .with_context(|| format!("failed to write {}", skill_file.display()))?;
 
     println!("{}", skill_dir.display());
@@ -328,7 +328,7 @@ struct GitCredentialEnvironment {
 impl GitCredentialEnvironment {
     fn create(api_url: &str) -> Result<Self> {
         let host = git_credential_host(api_url)?;
-        let temp_dir = unique_temp_dir("ops-session-git-credentials");
+        let temp_dir = unique_temp_dir("agent-session-git-credentials");
         let mut builder = fs::DirBuilder::new();
         #[cfg(unix)]
         {
@@ -339,7 +339,7 @@ impl GitCredentialEnvironment {
             .create(&temp_dir)
             .with_context(|| format!("failed to create {}", temp_dir.display()))?;
 
-        let helper_path = temp_dir.join("git-credential-ops-session");
+        let helper_path = temp_dir.join("git-credential-agent-session");
         fs::write(&helper_path, git_credential_helper_script(&host))
             .with_context(|| format!("failed to write {}", helper_path.display()))?;
 
