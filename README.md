@@ -1,15 +1,15 @@
-# agent tools
+# agentkit
 
-Operational tools packaged as Rust binaries.
+Operational agent tools packaged as Rust binaries.
 
 ## Shape
 
-This repository is a Cargo workspace for small, focused tools:
+`agentkit` is a Cargo workspace for small, focused tools:
 
 ```text
 crates/
   agentd/       local service broker for agent tools
-  agentctl/  config-driven restricted executor for homelab operations
+  agentctl/     config-driven restricted executor for homelab operations
 ```
 
 Build individual tools with Cargo:
