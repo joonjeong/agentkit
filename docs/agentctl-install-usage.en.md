@@ -10,6 +10,90 @@ Supported service-manager backends:
 - `systemd`: service control and logs through `systemctl` and `journalctl`
 - `openrc`: service control through `rc-service`; `logs` is not supported
 
+## Quickstart
+
+This example sets up a `hermes` agent user that may restart and inspect only the
+`hermes` and `cloudflared` services on a systemd host.
+
+Build the broker and client:
+
+```sh
+cargo build --release --bin agentd --bin agentctl
+```
+
+Install `agentd`, `agentctl`, and the default service/client files:
+
+```sh
+sudo target/release/agentd bootstrap
+sudo target/release/agentctl bootstrap --user hermes
+```
+
+Edit `/etc/agentkit/agentd.toml` so the service section matches the target host.
+Use the real uid for the `hermes` user:
+
+```sh
+id -u hermes
+sudo editor /etc/agentkit/agentd.toml
+```
+
+```toml
+[service]
+backend = "systemd"
+max_log_lines = 1000
+
+[service.callers.hermes]
+uids = [1001]
+service_control = ["hermes", "cloudflared"]
+service_read = ["hermes", "cloudflared"]
+```
+
+Validate and start the broker:
+
+```sh
+sudo /usr/local/sbin/agentd config check
+sudo systemctl daemon-reload
+sudo systemctl enable --now agentd
+```
+
+`agentd` creates `/run/agentd/agentd.sock` with mode `0660`. Make sure the
+agent user can connect to that socket. For a quick manual check:
+
+```sh
+sudo chgrp agent /run/agentd/agentd.sock
+```
+
+Persist the same socket ownership policy in your service manager if the socket
+is recreated on restart.
+
+Run service operations as the agent user:
+
+```sh
+sudo -u hermes /usr/local/sbin/agentctl service status hermes
+sudo -u hermes /usr/local/sbin/agentctl service restart cloudflared
+sudo -u hermes /usr/local/sbin/agentctl service logs hermes --lines 100
+```
+
+For notifications, add Telegram or Discord profiles to `agentd.toml`, then call
+the provider through `agentctl`:
+
+```sh
+sudo -u hermes /usr/local/sbin/agentctl telegram notify myriad \
+  --chat-id 123456789 \
+  --severity warning \
+  --title "Hermes" \
+  --message "deploy finished"
+```
+
+For GitHub App work, add a `[github_app]` profile to `agentd.toml`, then run the
+child command inside a short-lived token context:
+
+```sh
+sudo -u hermes /usr/local/sbin/agentctl github-app run \
+  --profile codex-review \
+  --repo OWNER/REPO \
+  -- gh pr view 123 --repo OWNER/REPO
+```
+
 ## Security Model
 
 The trusted administrator runs:

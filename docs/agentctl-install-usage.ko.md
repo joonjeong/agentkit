@@ -10,6 +10,91 @@
 - `systemd`: `systemctl`과 `journalctl`로 서비스 제어 및 로그 조회
 - `openrc`: `rc-service`로 서비스 제어. `logs`는 지원하지 않음
 
+## Quickstart
+
+이 예시는 systemd 호스트에서 `hermes` agent 사용자가 `hermes`와
+`cloudflared` 서비스만 재시작하고 조회할 수 있게 설정합니다.
+
+broker와 client를 빌드합니다.
+
+```sh
+cargo build --release --bin agentd --bin agentctl
+```
+
+`agentd`, `agentctl`, 기본 service/client 파일을 설치합니다.
+
+```sh
+sudo target/release/agentd bootstrap
+sudo target/release/agentctl bootstrap --user hermes
+```
+
+대상 호스트에 맞게 `/etc/agentkit/agentd.toml`의 service 섹션을 수정합니다.
+`hermes` 사용자의 실제 uid를 사용합니다.
+
+```sh
+id -u hermes
+sudo editor /etc/agentkit/agentd.toml
+```
+
+```toml
+[service]
+backend = "systemd"
+max_log_lines = 1000
+
+[service.callers.hermes]
+uids = [1001]
+service_control = ["hermes", "cloudflared"]
+service_read = ["hermes", "cloudflared"]
+```
+
+broker 설정을 검증하고 시작합니다.
+
+```sh
+sudo /usr/local/sbin/agentd config check
+sudo systemctl daemon-reload
+sudo systemctl enable --now agentd
+```
+
+`agentd`는 `/run/agentd/agentd.sock`을 mode `0660`으로 만듭니다. agent
+사용자가 이 socket에 접속할 수 있어야 합니다. 빠른 수동 확인은 다음처럼
+할 수 있습니다.
+
+```sh
+sudo chgrp agent /run/agentd/agentd.sock
+```
+
+socket이 restart 때 다시 만들어진다면 같은 ownership 정책을 service
+manager에 영구 반영하세요.
+
+agent 사용자로 서비스 작업을 실행합니다.
+
+```sh
+sudo -u hermes /usr/local/sbin/agentctl service status hermes
+sudo -u hermes /usr/local/sbin/agentctl service restart cloudflared
+sudo -u hermes /usr/local/sbin/agentctl service logs hermes --lines 100
+```
+
+알림을 쓰려면 `agentd.toml`에 Telegram 또는 Discord profile을 추가한 뒤
+`agentctl`로 provider를 호출합니다.
+
+```sh
+sudo -u hermes /usr/local/sbin/agentctl telegram notify myriad \
+  --chat-id 123456789 \
+  --severity warning \
+  --title "Hermes" \
+  --message "deploy finished"
+```
+
+GitHub App 작업은 `agentd.toml`에 `[github_app]` profile을 추가한 뒤,
+child command를 짧은 수명의 token context 안에서 실행합니다.
+
+```sh
+sudo -u hermes /usr/local/sbin/agentctl github-app run \
+  --profile codex-review \
+  --repo OWNER/REPO \
+  -- gh pr view 123 --repo OWNER/REPO
+```
+
 ## 보안 모델
 
 신뢰할 수 있는 관리자가 다음 명령을 실행합니다.
