@@ -19,6 +19,61 @@ cargo build --release --bin agentd
 cargo build --release --bin agentctl
 ```
 
+## Quickstart
+
+For a minimal service-control setup, build both binaries, install the broker and
+client, edit the generated broker config, then run `agentctl` as the agent user:
+
+```sh
+cargo build --release --bin agentd --bin agentctl
+
+sudo target/release/agentd bootstrap
+sudo target/release/agentctl bootstrap --user hermes
+```
+
+In `/etc/agentkit/agentd.toml`, allow the agent user's uid or gid to operate
+only the intended services:
+
+```toml
+[service]
+backend = "systemd"
+max_log_lines = 1000
+
+[service.callers.hermes]
+uids = [1001]
+service_control = ["hermes", "cloudflared"]
+service_read = ["hermes", "cloudflared"]
+```
+
+After validating and starting `agentd`, allow the `agent` group to connect to
+the broker socket. Persist that ownership policy in your service manager if the
+socket is recreated on restart.
+
+```sh
+sudo /usr/local/sbin/agentd config check
+sudo systemctl daemon-reload
+sudo systemctl enable --now agentd
+sudo chgrp agent /run/agentd/agentd.sock
+```
+
+The agent can then use the client without direct shell or service-manager
+access:
+
+```sh
+sudo -u hermes /usr/local/sbin/agentctl service status hermes
+sudo -u hermes /usr/local/sbin/agentctl service restart cloudflared
+```
+
+For GitHub App sessions, add a `[github_app]` profile to `agentd.toml`, then run
+the child command through a short-lived token context:
+
+```sh
+sudo -u hermes /usr/local/sbin/agentctl github-app run \
+  --profile codex-review \
+  --repo OWNER/REPO \
+  -- gh pr view 123 --repo OWNER/REPO
+```
+
 ## agentd
 
 `agentd` is a local service broker. It owns system-wide provider profiles and

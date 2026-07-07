@@ -1,13 +1,99 @@
 # agentctl 설치 및 사용법
 
-`agentctl`은 홈랩 운영 작업을 위한 config 기반 제한 실행기입니다.
-자동화 에이전트가 sudo를 통해 제한된 root 작업만 실행하게 하며, raw shell,
-`systemctl`, `apt`, Docker socket, Ansible 접근 권한은 주지 않습니다.
+`agentctl`은 홈랩 운영 작업을 위한 제한된 클라이언트입니다. 자동화
+에이전트에게 raw shell, `systemctl`, `apt`, Docker socket, Ansible 접근
+권한을 주지 않고, 서비스/알림/GitHub App session 요청을 Unix domain socket을
+통해 `agentd`로 보냅니다.
 
 지원하는 서비스 관리자 backend:
 
 - `systemd`: `systemctl`과 `journalctl`로 서비스 제어 및 로그 조회
 - `openrc`: `rc-service`로 서비스 제어. `logs`는 지원하지 않음
+
+## Quickstart
+
+이 예시는 systemd 호스트에서 `hermes` agent 사용자가 `hermes`와
+`cloudflared` 서비스만 재시작하고 조회할 수 있게 설정합니다.
+
+broker와 client를 빌드합니다.
+
+```sh
+cargo build --release --bin agentd --bin agentctl
+```
+
+`agentd`, `agentctl`, 기본 service/client 파일을 설치합니다.
+
+```sh
+sudo target/release/agentd bootstrap
+sudo target/release/agentctl bootstrap --user hermes
+```
+
+대상 호스트에 맞게 `/etc/agentkit/agentd.toml`의 service 섹션을 수정합니다.
+`hermes` 사용자의 실제 uid를 사용합니다.
+
+```sh
+id -u hermes
+sudo editor /etc/agentkit/agentd.toml
+```
+
+```toml
+[service]
+backend = "systemd"
+max_log_lines = 1000
+
+[service.callers.hermes]
+uids = [1001]
+service_control = ["hermes", "cloudflared"]
+service_read = ["hermes", "cloudflared"]
+```
+
+broker 설정을 검증하고 시작합니다.
+
+```sh
+sudo /usr/local/sbin/agentd config check
+sudo systemctl daemon-reload
+sudo systemctl enable --now agentd
+```
+
+`agentd`는 `/run/agentd/agentd.sock`을 mode `0660`으로 만듭니다. agent
+사용자가 이 socket에 접속할 수 있어야 합니다. 빠른 수동 확인은 다음처럼
+할 수 있습니다.
+
+```sh
+sudo chgrp agent /run/agentd/agentd.sock
+```
+
+socket이 restart 때 다시 만들어진다면 같은 ownership 정책을 service
+manager에 영구 반영하세요.
+
+agent 사용자로 서비스 작업을 실행합니다.
+
+```sh
+sudo -u hermes /usr/local/sbin/agentctl service status hermes
+sudo -u hermes /usr/local/sbin/agentctl service restart cloudflared
+sudo -u hermes /usr/local/sbin/agentctl service logs hermes --lines 100
+```
+
+알림을 쓰려면 `agentd.toml`에 Telegram 또는 Discord profile을 추가한 뒤
+`agentctl`로 provider를 호출합니다.
+
+```sh
+sudo -u hermes /usr/local/sbin/agentctl telegram notify myriad \
+  --chat-id 123456789 \
+  --severity warning \
+  --title "Hermes" \
+  --message "deploy finished"
+```
+
+GitHub App 작업은 `agentd.toml`에 `[github_app]` profile을 추가한 뒤,
+child command를 짧은 수명의 token context 안에서 실행합니다.
+
+```sh
+sudo -u hermes /usr/local/sbin/agentctl github-app run \
+  --profile codex-review \
+  --repo OWNER/REPO \
+  -- gh pr view 123 --repo OWNER/REPO
+```
 
 ## 보안 모델
 
@@ -17,19 +103,25 @@
 sudo ./agentctl bootstrap --user hermes
 ```
 
-`bootstrap`은 대상 호스트를 구성합니다.
+`agentctl`은 클라이언트일 뿐입니다. system-wide provider config, 장기
+secret, 서비스 관리자 실행은 `agentd`가 소유합니다. 서비스 요청에서
+`agentd`는 Unix-domain-socket peer credential(`uid`/`gid`)로 접속한
+프로세스를 식별하고, `/etc/agentkit/agentd.toml`의 service allowlist와
+대조해 허용 여부를 결정합니다.
+
+`agentctl bootstrap`은 클라이언트 측 구성을 준비합니다.
 
 - 현재 바이너리를 `/usr/local/sbin/agentctl`에 설치
 - `agent` 시스템 그룹이 없으면 생성
 - `--user`로 지정한 기존 계정을 `agent` 그룹에 추가
 - `/etc/agentkit/agentctl.toml`이 없으면 기본 config 생성
-- `/etc/sudoers.d/agent` 생성
 - `/var/log/agentctl` 아래 로그 경로 생성
 - `/etc/logrotate.d/agentctl` 생성
 
-생성되는 sudoers 규칙은 `agent` 멤버에게 운영 서브커맨드만 허용합니다.
-에이전트가 `bootstrap`을 실행할 수는 없습니다. 이 규칙은
-`crates/agentctl/resources/templates/sudoers.agent.template`에서 렌더링됩니다.
+sudoers 규칙은 설치하지 않습니다. 의도한 agent 사용자나 그룹이 필요한
+작업만 수행할 수 있도록 `agentd` socket 권한과
+`/etc/agentkit/agentd.toml`의 `[service.callers.<name>]` 항목을 설정해야
+합니다.
 
 ## 빌드
 
@@ -61,10 +153,8 @@ sudo ./agentctl bootstrap \
   --binary-path /usr/local/sbin/agentctl \
   --backend systemd \
   --group agent \
-  --sudoers-path /etc/sudoers.d/agent \
   --config-path /etc/agentkit/agentctl.toml \
   --audit-log-path /var/log/agentctl/audit.log \
-  --sudo-log-path /var/log/agentctl/sudo.log \
   --logrotate-path /etc/logrotate.d/agentctl
 ```
 
@@ -73,7 +163,12 @@ sudo ./agentctl bootstrap \
 
 ## Config
 
-기본 config 형식은 TOML입니다.
+`agentctl`에는 `config check`, `config explain`, `config template`,
+bootstrap 기본값, audit log 위치를 위한 작은 local TOML config가 남아
+있습니다. 서비스 실행 정책은 이 client config가 아니라 `agentd` config에
+있습니다.
+
+client config 형식은 TOML입니다.
 
 ```toml
 version = 1
@@ -90,13 +185,15 @@ service_control = ["hermes", "cloudflared", "tailscale"]
 service_read = ["hermes", "cloudflared", "tailscale"]
 ```
 
-호출자는 `SUDO_USER`에서 읽습니다. 예를 들어 `hermes`가 다음을 실행하면:
+예를 들어 이 legacy/client-side config는 `hermes`가 service control/read
+명령을 요청할 수 있음을 보여줍니다.
 
 ```sh
-sudo /usr/local/sbin/agentctl service restart hermes
+AGENTCTL_CONFIG_PATH=./config.toml agentctl config explain
 ```
 
-`agentctl`은 `callers.hermes.service_control`에 `hermes`가 있는지 확인합니다.
+실제 `service` 명령의 권한 검사는 `agentd`가 peer credential과
+`/etc/agentkit/agentd.toml`의 `[service.callers.<name>]` 항목으로 수행합니다.
 
 Alpine/OpenRC 호스트에서는 다음처럼 설정합니다.
 
@@ -106,29 +203,30 @@ backend = "openrc"
 max_log_lines = 1000
 ```
 
-`backend = "openrc"`에서는 `service start`, `service stop`,
-`service restart`, `service reload`, `service status`가 `rc-service`를
-호출합니다. OpenRC에는 journald에 대응하는 표준 서비스별 로그 조회 방식이
-없으므로 `logs`는 명시적인 unsupported backend 오류를 반환합니다.
+`agentd` service config에서 `backend = "openrc"`를 설정하면
+`service start`, `service stop`, `service restart`, `service reload`,
+`service status`가 `rc-service`를 호출합니다. OpenRC에는 journald에
+대응하는 표준 서비스별 로그 조회 방식이 없으므로 `logs`는 명시적인
+unsupported backend 오류를 반환합니다.
 
 ## 사용법
 
 허용되는 운영 명령:
 
 ```sh
-sudo /usr/local/sbin/agentctl service restart hermes
-sudo /usr/local/sbin/agentctl service start cloudflared
-sudo /usr/local/sbin/agentctl service stop tailscale
-sudo /usr/local/sbin/agentctl service reload cloudflared
-sudo /usr/local/sbin/agentctl service status cloudflared
-sudo /usr/local/sbin/agentctl service logs hermes --lines 200 # systemd only
-sudo /usr/local/sbin/agentctl telegram notify myriad --chat-id 123456789 --severity critical --message "disk full"
-sudo /usr/local/sbin/agentctl discord notify myriad --title "Hermes" --message "service degraded"
-sudo /usr/local/sbin/agentctl config check
-sudo /usr/local/sbin/agentctl config explain
-sudo /usr/local/sbin/agentctl config explain --config-path ./config.toml
+agentctl service restart hermes
+agentctl service start cloudflared
+agentctl service stop tailscale
+agentctl service reload cloudflared
+agentctl service status cloudflared
+agentctl service logs hermes --lines 200 # systemd only
+agentctl telegram notify myriad --chat-id 123456789 --severity critical --message "disk full"
+agentctl discord notify myriad --title "Hermes" --message "service degraded"
+agentctl config check
+agentctl config explain
+agentctl config explain --config-path ./config.toml
 agentctl config template --backend openrc --output ./config.toml
-sudo /usr/local/sbin/agentctl version
+agentctl version
 ```
 
 다음 계열의 명령은 의도적으로 제공하지 않습니다.
@@ -139,24 +237,29 @@ sudo /usr/local/sbin/agentctl version
 - raw `apt`
 - `ansible-playbook`
 
-`agentctl telegram notify`와 `agentctl discord notify`는 Unix domain socket을 통해
-알림 전송을 `agentd`에 위임합니다. Telegram과 Discord 프로파일 credential은 agentctl config가
-아니라 `/etc/agentkit/agentd.toml`에 설정합니다. Telegram의 `chat_id` 같은
-목적지는 notify 실행 시 파라미터로 전달합니다.
+모든 운영 명령은 기본적으로 `/run/agentd/agentd.sock`의 `agentd` socket을
+사용합니다. `--agentd-socket` 또는 `AGENTCTL_AGENTD_SOCKET`으로 바꿀 수
+있습니다.
+
+`agentctl telegram notify`와 `agentctl discord notify`는 Unix domain socket을
+통해 알림 전송을 `agentd`에 위임합니다. Telegram과 Discord 프로파일
+credential은 agentctl config가 아니라 `/etc/agentkit/agentd.toml`에
+설정합니다. Telegram의 `chat_id` 같은 목적지는 notify 실행 시 파라미터로
+전달합니다.
 
 ## 확인
 
 config를 검증합니다.
 
 ```sh
-sudo /usr/local/sbin/agentctl config check
-sudo /usr/local/sbin/agentctl config check --config-path ./config.toml
+agentctl config check
+agentctl config check --config-path ./config.toml
 ```
 
 검증된 config와 caller별 파생 명령을 출력합니다.
 
 ```sh
-sudo /usr/local/sbin/agentctl config explain
+agentctl config explain
 AGENTCTL_CONFIG_PATH=./config.toml agentctl config explain
 ```
 
@@ -176,8 +279,7 @@ agentctl config template --backend openrc --output ./config.toml --force
 `crates/agentctl/resources/templates/config.agentctl.toml.template`에서
 렌더링됩니다.
 
-`config template`은 관리자 편의 명령이며, 생성되는 sudoers 규칙에는
-포함되지 않습니다.
+`config template`은 관리자 편의 명령입니다.
 
 감사 로그는 다음 파일에 기록됩니다.
 
