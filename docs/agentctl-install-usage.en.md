@@ -163,12 +163,44 @@ Without `--force-config`, an existing config file is preserved.
 
 ## Config
 
+Service manipulation policy is the important gate for host agents. Put it in
+`/etc/agentkit/agentd.toml`, where `agentd` checks Unix peer credentials before
+allowing service reads or operations:
+
+```toml
+[service]
+backend = "systemd"
+max_log_lines = 1000
+
+[service.hermes]
+viewer = ["u:hermes", "g:agentkit"]
+operator = ["u:hermes", "g:agentkit"]
+
+[service.cloudflared]
+viewer = ["u:hermes", "g:agentkit"]
+operator = ["u:hermes", "g:agentkit"]
+```
+
+`viewer` identities may read service status and logs. `operator` identities may
+start, stop, restart, and reload the service.
+
+`agentctl config explain` is for inspecting legacy local client metadata and
+the derived service commands it describes. Do not use this output as the
+service authorization source:
+
+```sh
+AGENTCTL_CONFIG_PATH=./config.toml agentctl config explain
+```
+
 `agentctl` still has a small local TOML config for `config check`,
 `config explain`, `config template`, bootstrap defaults, and audit-log
-placement. Service execution policy lives in the `agentd` config, not in this
-client config.
+placement. The generated template keeps defaults first and the legacy
+per-caller metadata at the bottom.
 
-The client config format is TOML:
+The client config format is TOML. The `[callers.<name>]` service lists are
+legacy client-side metadata for `config check` and `config explain`; `agentctl
+service ...` delegates to `agentd`, and `agentd` decides access from
+`agentd.toml`.
 
 ```toml
 version = 1
@@ -185,15 +217,9 @@ service_control = ["hermes", "cloudflared", "tailscale"]
 service_read = ["hermes", "cloudflared", "tailscale"]
 ```
 
-For example, this legacy/client-side config says that `hermes` may request
-service control and read commands:
-
-```sh
-AGENTCTL_CONFIG_PATH=./config.toml agentctl config explain
-```
-
+This legacy/client-side config only describes service commands for inspection.
 Actual `service` command authorization is performed by `agentd` using peer
-credentials and `[service.<target>]` in `/etc/agentkit/agentd.toml`.
+credentials and `[service.<target>]` entries in `/etc/agentkit/agentd.toml`.
 
 For Alpine/OpenRC hosts, set:
 
@@ -254,7 +280,8 @@ agentctl config check
 agentctl config check --config-path ./config.toml
 ```
 
-Dump the validated config and per-caller derived commands:
+Dump the validated legacy client metadata and per-caller derived service
+commands:
 
 ```sh
 agentctl config explain
