@@ -29,10 +29,9 @@ sudo target/release/agentctl bootstrap --user hermes
 ```
 
 대상 호스트에 맞게 `/etc/agentkit/agentd.toml`의 service 섹션을 수정합니다.
-`hermes` 사용자의 실제 uid를 사용합니다.
+agent 계정의 실제 사용자와 그룹 이름을 사용합니다.
 
 ```sh
-id -u hermes
 sudo editor /etc/agentkit/agentd.toml
 ```
 
@@ -41,10 +40,13 @@ sudo editor /etc/agentkit/agentd.toml
 backend = "systemd"
 max_log_lines = 1000
 
-[service.callers.hermes]
-uids = [1001]
-service_control = ["hermes", "cloudflared"]
-service_read = ["hermes", "cloudflared"]
+[service.hermes]
+viewer = ["u:hermes", "g:agentkit"]
+operator = ["u:hermes", "g:agentkit"]
+
+[service.cloudflared]
+viewer = ["u:hermes", "g:agentkit"]
+operator = ["u:hermes", "g:agentkit"]
 ```
 
 broker 설정을 검증하고 시작합니다.
@@ -120,7 +122,7 @@ secret, 서비스 관리자 실행은 `agentd`가 소유합니다. 서비스 요
 
 sudoers 규칙은 설치하지 않습니다. 의도한 agent 사용자나 그룹이 필요한
 작업만 수행할 수 있도록 `agentd` socket 권한과
-`/etc/agentkit/agentd.toml`의 `[service.callers.<name>]` 항목을 설정해야
+`/etc/agentkit/agentd.toml`의 `[service.<target>]` 항목을 설정해야
 합니다.
 
 ## 빌드
@@ -193,7 +195,7 @@ AGENTCTL_CONFIG_PATH=./config.toml agentctl config explain
 ```
 
 실제 `service` 명령의 권한 검사는 `agentd`가 peer credential과
-`/etc/agentkit/agentd.toml`의 `[service.callers.<name>]` 항목으로 수행합니다.
+`/etc/agentkit/agentd.toml`의 `[service.<target>]` 항목으로 수행합니다.
 
 Alpine/OpenRC 호스트에서는 다음처럼 설정합니다.
 

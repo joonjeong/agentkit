@@ -29,10 +29,9 @@ sudo target/release/agentctl bootstrap --user hermes
 ```
 
 Edit `/etc/agentkit/agentd.toml` so the service section matches the target host.
-Use the real uid for the `hermes` user:
+Use the real user and group names for the agent account:
 
 ```sh
-id -u hermes
 sudo editor /etc/agentkit/agentd.toml
 ```
 
@@ -41,10 +40,13 @@ sudo editor /etc/agentkit/agentd.toml
 backend = "systemd"
 max_log_lines = 1000
 
-[service.callers.hermes]
-uids = [1001]
-service_control = ["hermes", "cloudflared"]
-service_read = ["hermes", "cloudflared"]
+[service.hermes]
+viewer = ["u:hermes", "g:agentkit"]
+operator = ["u:hermes", "g:agentkit"]
+
+[service.cloudflared]
+viewer = ["u:hermes", "g:agentkit"]
+operator = ["u:hermes", "g:agentkit"]
 ```
 
 Validate and start the broker:
@@ -118,8 +120,8 @@ credentials (`uid`/`gid`) and then checks the requested service against
 - writes `/etc/logrotate.d/agentctl`
 
 It does not install sudoers rules. Make sure the `agentd` socket permissions and
-`[service.callers.<name>]` entries in `/etc/agentkit/agentd.toml` allow the
-intended agent users or groups to connect and perform only the required actions.
+`[service.<target>]` entries in `/etc/agentkit/agentd.toml` allow the intended
+agent users or groups to connect and perform only the required actions.
 
 ## Build
 
@@ -191,7 +193,7 @@ AGENTCTL_CONFIG_PATH=./config.toml agentctl config explain
 ```
 
 Actual `service` command authorization is performed by `agentd` using peer
-credentials and `[service.callers.<name>]` in `/etc/agentkit/agentd.toml`.
+credentials and `[service.<target>]` in `/etc/agentkit/agentd.toml`.
 
 For Alpine/OpenRC hosts, set:
 

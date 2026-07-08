@@ -40,10 +40,17 @@ path = "/etc/agentkit/secrets/discord-webhook-url"
 backend = "systemd"
 max_log_lines = 1000
 
-[service.callers.hermes]
-uids = [1001]
-service_control = ["hermes", "cloudflared", "tailscale"]
-service_read = ["hermes", "cloudflared", "tailscale"]
+[service.hermes]
+viewer = ["u:hermes", "g:agentkit"]
+operator = ["u:hermes", "g:agentkit"]
+
+[service.cloudflared]
+viewer = ["u:hermes", "g:agentkit"]
+operator = ["u:hermes", "g:agentkit"]
+
+[service.tailscale]
+viewer = ["u:hermes", "g:agentkit"]
+operator = ["u:hermes", "g:agentkit"]
 ```
 
 Validate and run the broker with:
@@ -128,5 +135,6 @@ Successful service response:
 ```
 
 Service authorization is based on Unix-domain-socket peer credentials. agentd
-maps the connecting process uid/gid to `[service.callers.<name>]` entries and
-rejects service targets outside `service_control` or `service_read`.
+checks the connecting process uid/gid against `[service.<target>]` entries and
+rejects actions outside `viewer` or `operator` identity lists. Use `u:<name>`
+for users and `g:<name>` for groups.

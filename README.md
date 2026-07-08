@@ -31,18 +31,21 @@ sudo target/release/agentd bootstrap
 sudo target/release/agentctl bootstrap --user hermes
 ```
 
-In `/etc/agentkit/agentd.toml`, allow the agent user's uid or gid to operate
-only the intended services:
+In `/etc/agentkit/agentd.toml`, allow the agent user or group to operate only
+the intended services:
 
 ```toml
 [service]
 backend = "systemd"
 max_log_lines = 1000
 
-[service.callers.hermes]
-uids = [1001]
-service_control = ["hermes", "cloudflared"]
-service_read = ["hermes", "cloudflared"]
+[service.hermes]
+viewer = ["u:hermes", "g:agentkit"]
+operator = ["u:hermes", "g:agentkit"]
+
+[service.cloudflared]
+viewer = ["u:hermes", "g:agentkit"]
+operator = ["u:hermes", "g:agentkit"]
 ```
 
 After validating and starting `agentd`, allow the `agent` group to connect to
