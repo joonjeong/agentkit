@@ -19,8 +19,8 @@ For a host agent such as Hermes, install the released `agentd` broker and
 
 ```sh
 repo="joonjeong/agentkit"
-version="v0.YYWW.BUILD"
 target="x86_64-unknown-linux-musl" # or aarch64-unknown-linux-musl
+version=$(gh release view --repo "${repo}" --json tagName --template '{{.tagName}}')
 
 gh release download "${version}" --repo "${repo}" --pattern "agentd-${target}-*"
 gh release download "${version}" --repo "${repo}" --pattern "agentctl-${target}-*"
