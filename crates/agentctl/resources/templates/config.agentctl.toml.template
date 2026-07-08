@@ -1,8 +1,10 @@
 # Example agentctl config for {backend_name} hosts.
 #
 # Runtime config is installed to /etc/agentkit/agentctl.toml. Edit that file
-# on each host after bootstrap. This example keeps one caller and a small
-# service allowlist.{backend_note}
+# on each host after bootstrap. Service authorization lives in agentd.toml;
+# the per-caller service allowlist below is legacy client-side metadata for
+# config check/explain compatibility, not the service gate. Defaults stay first;
+# the legacy per-caller section stays at the bottom.{backend_note}
 
 version = 1
 
@@ -11,8 +13,10 @@ backend = "{backend}"
 max_log_lines = 1000
 
 [callers.hermes]
-# Allows service start, stop, restart, and reload.
+# Legacy metadata for config explain; agentd [service.<name>] operator policy
+# is the authority for service start, stop, restart, and reload.
 service_control = ["hermes", "cloudflared", "tailscale"]
 
-# Allows service status and logs.{service_read_note}
+# Legacy metadata for config explain; agentd [service.<name>] viewer policy
+# is the authority for service status and logs.{service_read_note}
 service_read = ["hermes", "cloudflared", "tailscale"]

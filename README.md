@@ -12,27 +12,35 @@ crates/
   agentctl/     config-driven restricted executor for homelab operations
 ```
 
-Build individual tools with Cargo:
-
-```sh
-cargo build --release --bin agentd
-cargo build --release --bin agentctl
-```
-
 ## Quickstart
 
-For a minimal service-control setup, build both binaries, install the broker and
-client, edit the generated broker config, then run `agentctl` as the agent user:
+For a host agent such as Hermes, install the released `agentd` broker and
+`agentctl` client from GitHub. Pick the Linux asset for the host architecture:
 
 ```sh
-cargo build --release --bin agentd --bin agentctl
+repo="joonjeong/agentkit"
+target="x86_64-unknown-linux-musl" # or aarch64-unknown-linux-musl
+version=$(gh release view --repo "${repo}" --json tagName --template '{{.tagName}}')
 
-sudo target/release/agentd bootstrap
-sudo target/release/agentctl bootstrap --user hermes
+gh release download "${version}" --repo "${repo}" --pattern "agentd-${target}-*"
+gh release download "${version}" --repo "${repo}" --pattern "agentctl-${target}-*"
+
+install -m 0755 "agentd-${target}-${version#v}" ./agentd
+install -m 0755 "agentctl-${target}-${version#v}" ./agentctl
+```
+
+Then bootstrap the system-wide broker and the client entrypoint for the agent
+user:
+
+```sh
+sudo ./agentd bootstrap
+sudo ./agentctl bootstrap --user hermes
 ```
 
 In `/etc/agentkit/agentd.toml`, allow the agent user or group to operate only
-the intended services:
+the intended services. This is the core service gate: `viewer` identities may
+read service state and logs; `operator` identities may also start, stop,
+restart, and reload the service.
 
 ```toml
 [service]
@@ -48,9 +56,9 @@ viewer = ["u:hermes", "g:agentkit"]
 operator = ["u:hermes", "g:agentkit"]
 ```
 
-After validating and starting `agentd`, allow the `agent` group to connect to
-the broker socket. Persist that ownership policy in your service manager if the
-socket is recreated on restart.
+After validating and starting `agentd`, make the broker socket available to the
+agent group. Persist that ownership policy in the service manager if the socket
+is recreated on restart.
 
 ```sh
 sudo /usr/local/sbin/agentd config check
@@ -59,31 +67,59 @@ sudo systemctl enable --now agentd
 sudo chgrp agent /run/agentd/agentd.sock
 ```
 
-The agent can then use the client without direct shell or service-manager
-access:
+The agent can then ask the gate to manipulate services without direct shell,
+sudo, or service-manager access:
 
 ```sh
 sudo -u hermes /usr/local/sbin/agentctl service status hermes
 sudo -u hermes /usr/local/sbin/agentctl service restart cloudflared
 ```
 
-For GitHub App sessions, add a `[github_app]` profile to `agentd.toml`, then run
-the child command through a short-lived token context:
+The same broker can gate other host capabilities. Configure provider profiles
+once in `/etc/agentkit/agentd.toml`, keep long-lived secrets on the host, and
+let the agent request scoped operations through `agentctl`:
 
 ```sh
 sudo -u hermes /usr/local/sbin/agentctl github-app run \
   --profile codex-review \
   --repo OWNER/REPO \
   -- gh pr view 123 --repo OWNER/REPO
+
+sudo -u hermes /usr/local/sbin/agentctl telegram notify myriad \
+  --chat-id 123456789 \
+  --severity critical \
+  --message "service restart failed"
+
+sudo -u hermes /usr/local/sbin/agentctl discord notify myriad \
+  --severity warning \
+  --message "cloudflared is degraded"
 ```
 
-## agentd
+If an agent cannot install system-wide files directly, have an administrator or
+provisioning tool run the two bootstrap commands above, or place the downloaded
+binaries under `/usr/local/sbin`, write `/etc/agentkit/agentd.toml`, and manage
+the `agentd` service/socket with the host's service manager. The runtime agent
+only needs permission to execute `agentctl` and connect to the broker socket.
+
+For local development, build the same binaries with Cargo:
+
+```sh
+cargo build --release --bin agentd --bin agentctl
+```
+
+## agentd: Host Gate
 
 `agentd` is a local service broker. It owns system-wide provider profiles and
 long-lived secret access, then serves short-lived credentials and notification
 delivery to local clients over a Unix domain socket.
 
-For now, `agentd` mints GitHub App installation tokens:
+`agentd` is the trusted side of agentkit. It checks Unix peer credentials for
+local callers, enforces service `viewer` and `operator` policy, runs fixed
+service-manager commands without a shell, mints scoped GitHub App installation
+tokens, and sends Telegram or Discord notifications without exposing provider
+secrets to the caller.
+
+Example broker config:
 
 ```toml
 [github_app]
@@ -101,6 +137,22 @@ path = "/etc/agentkit/secrets/codex-review-github-app.private-key.pem"
 [github_app.profiles.codex-review.permissions]
 contents = "read"
 pull_requests = "read"
+
+[telegram.profiles.myriad.token]
+type = "file"
+path = "/etc/agentkit/secrets/telegram-bot-token"
+
+[discord.profiles.myriad.webhook]
+type = "file"
+path = "/etc/agentkit/secrets/discord-webhook-url"
+
+[service]
+backend = "systemd"
+max_log_lines = 1000
+
+[service.hermes]
+viewer = ["u:hermes", "g:agentkit"]
+operator = ["u:hermes", "g:agentkit"]
 ```
 
 Validate and run the broker with:
@@ -157,11 +209,12 @@ Validate broker configuration with `agentd config check`.
 See [crates/agentd/README.md](crates/agentd/README.md) for the broker config
 schema and UDS wire protocol.
 
-## agentctl
+## agentctl: Agent Client
 
-`agentctl` is a separate binary for allowing automation agents such as
-Hermes or OpenClaw to perform a narrow set of service operations through
-agentd:
+`agentctl` is the untrusted-side client for automation agents such as Hermes or
+OpenClaw. It does not read provider secrets and it does not expose raw shell,
+`systemctl`, package-manager, or Ansible execution. It sends typed requests to
+`agentd`, which decides whether the local caller is allowed to perform them.
 
 - [Installation and usage (English)](docs/agentctl-install-usage.en.md)
 - [설치 및 사용법 (한국어)](docs/agentctl-install-usage.ko.md)
@@ -174,6 +227,7 @@ agentctl service reload cloudflared
 agentctl service status cloudflared
 agentctl service logs hermes --lines 200
 agentctl telegram notify myriad --chat-id 123456789 --severity critical --message "disk full"
+agentctl discord notify myriad --severity warning --message "deployment delayed"
 agentctl config check
 agentctl config explain
 agentctl config explain --config-path ./config.toml

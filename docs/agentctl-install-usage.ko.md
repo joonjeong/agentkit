@@ -165,12 +165,44 @@ sudo ./agentctl bootstrap \
 
 ## Config
 
+서비스 조작 정책은 host agent에서 가장 중요한 gate입니다.
+`/etc/agentkit/agentd.toml`에 두고, `agentd`가 Unix peer credential을 확인한
+뒤 service read와 operation을 허용합니다.
+
+```toml
+[service]
+backend = "systemd"
+max_log_lines = 1000
+
+[service.hermes]
+viewer = ["u:hermes", "g:agentkit"]
+operator = ["u:hermes", "g:agentkit"]
+
+[service.cloudflared]
+viewer = ["u:hermes", "g:agentkit"]
+operator = ["u:hermes", "g:agentkit"]
+```
+
+`viewer` identity는 service status와 logs를 읽을 수 있습니다. `operator`
+identity는 service start, stop, restart, reload도 수행할 수 있습니다.
+
+`agentctl config explain`은 legacy local client metadata와 거기서 파생되는
+service command를 확인하는 용도입니다. 이 출력값을 service authorization
+source로 사용하지 않습니다.
+
+```sh
+AGENTCTL_CONFIG_PATH=./config.toml agentctl config explain
+```
+
 `agentctl`에는 `config check`, `config explain`, `config template`,
 bootstrap 기본값, audit log 위치를 위한 작은 local TOML config가 남아
-있습니다. 서비스 실행 정책은 이 client config가 아니라 `agentd` config에
-있습니다.
+있습니다. 생성되는 template은 defaults를 앞에 두고, legacy per-caller
+metadata를 아래쪽에 둡니다.
 
-client config 형식은 TOML입니다.
+client config 형식은 TOML입니다. `[callers.<name>]`의 service list는
+`config check`와 `config explain`을 위한 legacy client-side metadata입니다.
+`agentctl service ...`는 `agentd`에 위임하고, 접근 허용 여부는 `agentd`가
+`agentd.toml`을 기준으로 결정합니다.
 
 ```toml
 version = 1
@@ -187,13 +219,7 @@ service_control = ["hermes", "cloudflared", "tailscale"]
 service_read = ["hermes", "cloudflared", "tailscale"]
 ```
 
-예를 들어 이 legacy/client-side config는 `hermes`가 service control/read
-명령을 요청할 수 있음을 보여줍니다.
-
-```sh
-AGENTCTL_CONFIG_PATH=./config.toml agentctl config explain
-```
-
+이 legacy/client-side config는 inspection용 service command만 설명합니다.
 실제 `service` 명령의 권한 검사는 `agentd`가 peer credential과
 `/etc/agentkit/agentd.toml`의 `[service.<target>]` 항목으로 수행합니다.
 
@@ -258,7 +284,7 @@ agentctl config check
 agentctl config check --config-path ./config.toml
 ```
 
-검증된 config와 caller별 파생 명령을 출력합니다.
+검증된 legacy client metadata와 caller별 파생 service command를 출력합니다.
 
 ```sh
 agentctl config explain
