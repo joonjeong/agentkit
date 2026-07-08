@@ -118,7 +118,7 @@ fn config(args: ConfigArgs) -> Result<()> {
                 println!("discord profiles: {}", discord.profiles.len());
             }
             if let Some(service) = config.service {
-                println!("service callers: {}", service.callers.len());
+                println!("service entries: {}", service.services.len());
             }
             Ok(())
         }

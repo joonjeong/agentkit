@@ -1,5 +1,6 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
+use std::ffi::CStr;
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
@@ -54,7 +55,7 @@ fn bootstrap_installs_binary_and_writes_default_config() {
     assert!(config_contents.contains("[github_app]"));
     assert!(config_contents.contains("[telegram.profiles.myriad.token]"));
     assert!(config_contents.contains("[discord.profiles.myriad.webhook]"));
-    assert!(config_contents.contains("[service.callers.hermes]"));
+    assert!(config_contents.contains("[service.hermes]"));
     let service_contents = fs::read_to_string(service).expect("service written");
     assert!(service_contents.contains("[Service]"));
     assert!(service_contents.contains(&format!(
@@ -451,11 +452,11 @@ fn write_config(config_dir: &std::path::Path, api_url: &str) -> std::path::PathB
     fs::write(&discord_webhook_path, "https://discord.test/webhook")
         .expect("discord webhook written");
     let config_path = config_dir.join("config.toml");
-    let uid = unsafe { libc::getuid() };
+    let user = current_username();
     fs::write(
         &config_path,
         format!(
-            "[github_app]\napi_url = \"{api_url}\"\ndefault_profile = \"default\"\n\n[github_app.profiles.default]\napp_id = 1\ninstallation_id = 42\nrepos = [\"OWNER/REPO\"]\n\n[github_app.profiles.default.private_key]\ntype = \"file\"\npath = \"{}\"\n\n[github_app.profiles.default.permissions]\ncontents = \"read\"\n\n[telegram.profiles.myriad.token]\ntype = \"file\"\npath = \"{}\"\n\n[discord.profiles.myriad.webhook]\ntype = \"file\"\npath = \"{}\"\n\n[service]\nbackend = \"systemd\"\nmax_log_lines = 1000\n\n[service.callers.hermes]\nuids = [{uid}]\nservice_control = [\"hermes\"]\nservice_read = [\"hermes\"]\n",
+            "[github_app]\napi_url = \"{api_url}\"\ndefault_profile = \"default\"\n\n[github_app.profiles.default]\napp_id = 1\ninstallation_id = 42\nrepos = [\"OWNER/REPO\"]\n\n[github_app.profiles.default.private_key]\ntype = \"file\"\npath = \"{}\"\n\n[github_app.profiles.default.permissions]\ncontents = \"read\"\n\n[telegram.profiles.myriad.token]\ntype = \"file\"\npath = \"{}\"\n\n[discord.profiles.myriad.webhook]\ntype = \"file\"\npath = \"{}\"\n\n[service]\nbackend = \"systemd\"\nmax_log_lines = 1000\n\n[service.hermes]\nviewer = [\"u:{user}\"]\noperator = [\"u:{user}\"]\n",
             private_key_path.to_string_lossy(),
             telegram_token_path.to_string_lossy(),
             discord_webhook_path.to_string_lossy()
@@ -463,6 +464,27 @@ fn write_config(config_dir: &std::path::Path, api_url: &str) -> std::path::PathB
     )
     .expect("config written");
     config_path
+}
+
+fn current_username() -> String {
+    let mut pwd = unsafe { std::mem::zeroed::<libc::passwd>() };
+    let mut result = std::ptr::null_mut::<libc::passwd>();
+    let mut buffer = vec![0_u8; 16 * 1024];
+    let status = unsafe {
+        libc::getpwuid_r(
+            libc::getuid(),
+            std::ptr::addr_of_mut!(pwd),
+            buffer.as_mut_ptr().cast(),
+            buffer.len(),
+            std::ptr::addr_of_mut!(result),
+        )
+    };
+    assert_eq!(status, 0, "getpwuid_r succeeds");
+    assert!(!result.is_null(), "current uid resolves to a user");
+    unsafe { CStr::from_ptr(pwd.pw_name) }
+        .to_str()
+        .expect("current username is utf-8")
+        .to_owned()
 }
 
 fn wait_for_socket(socket_path: &std::path::Path) {
