@@ -248,9 +248,7 @@ where
             ),
         },
         Command::GithubApp(args) => {
-            github::github_app(args)
-                .map_err(|error| Error::GithubAppSession(format!("{error:#}")))?;
-            Ok(0)
+            github::github_app(args).map_err(|error| Error::GithubAppSession(format!("{error:#}")))
         }
         Command::Telegram(command) => match command.command {
             TelegramSubcommand::Notify(args) => notify_telegram(args),

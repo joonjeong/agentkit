@@ -18,7 +18,7 @@ pub(crate) enum Backend {
     Openrc,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub(crate) struct ServiceConfigFile {
     pub(crate) backend: Option<Backend>,
     pub(crate) max_log_lines: Option<u32>,
@@ -27,7 +27,7 @@ pub(crate) struct ServiceConfigFile {
     pub(crate) services: BTreeMap<String, ServicePolicy>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct ServicePolicy {
     #[serde(default)]

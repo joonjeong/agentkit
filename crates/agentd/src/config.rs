@@ -9,7 +9,7 @@ use serde::Deserialize;
 use crate::notification::{DiscordProfile, TelegramProfile};
 use crate::service::ServiceConfigFile;
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Clone, Debug, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct AgentdConfigFile {
     pub(crate) github_app: Option<GithubConfigFile>,
@@ -18,7 +18,7 @@ pub(crate) struct AgentdConfigFile {
     pub(crate) service: Option<ServiceConfigFile>,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Clone, Debug, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct GithubConfigFile {
     pub(crate) api_url: Option<String>,
@@ -40,7 +40,7 @@ pub(crate) enum PrivateKeySource {
     },
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct GithubConfigProfile {
     pub(crate) app_id: Option<u64>,
@@ -143,14 +143,14 @@ fn validate_github_app(github_app: &GithubConfigFile, path: &Path) -> Result<()>
     Ok(())
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Clone, Debug, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct TelegramConfigFile {
     #[serde(default)]
     pub(crate) profiles: BTreeMap<String, TelegramProfile>,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Clone, Debug, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct DiscordConfigFile {
     #[serde(default)]

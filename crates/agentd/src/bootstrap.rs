@@ -43,6 +43,12 @@ pub(crate) struct BootstrapArgs {
     #[arg(long, default_value = DEFAULT_SOCKET_PATH)]
     socket_path: PathBuf,
 
+    /// Group to own the socket directory. When set, bootstrap sets the
+    /// socket directory's group and adds group-read and group-execute
+    /// permissions so `agentctl` clients in that group can connect.
+    #[arg(long)]
+    socket_group: Option<String>,
+
     /// Service file to create when missing.
     #[arg(long)]
     service_path: Option<PathBuf>,
@@ -96,6 +102,12 @@ pub(crate) fn run(args: BootstrapArgs) -> Result<()> {
         args.force_service,
     )?;
     println!("service ready: {}", service_path.display());
+
+    if let Some(group) = &args.socket_group {
+        let socket_dir = args.socket_path.parent().unwrap_or(&args.socket_path);
+        set_socket_dir_group(socket_dir, group)?;
+        println!("socket group set: {group} on {}", socket_dir.display());
+    }
 
     Ok(())
 }
@@ -257,7 +269,66 @@ fn set_mode(path: &Path, mode: u32) -> Result<()> {
         .with_context(|| format!("failed to set permissions on {}", path.display()))
 }
 
+#[cfg(unix)]
+fn set_socket_dir_group(path: &Path, group: &str) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    // Resolve group name to GID.
+    let name = CString::new(group).context("group name contains a NUL byte")?;
+    let mut grp = unsafe { std::mem::zeroed::<libc::group>() };
+    let mut result = std::ptr::null_mut::<libc::group>();
+    let mut buffer = vec![0_u8; 16 * 1024];
+    let status = unsafe {
+        libc::getgrnam_r(
+            name.as_ptr(),
+            std::ptr::addr_of_mut!(grp),
+            buffer.as_mut_ptr().cast(),
+            buffer.len(),
+            std::ptr::addr_of_mut!(result),
+        )
+    };
+    if status != 0 {
+        return Err(std::io::Error::from_raw_os_error(status))
+            .context(format!("failed to resolve group {group:?}"));
+    }
+    if result.is_null() {
+        return Err(anyhow!("group does not exist: {group:?}"));
+    }
+    let gid = grp.gr_gid;
+
+    // Set group ownership on the directory.
+    unsafe {
+        if libc::chown(
+            path.as_os_str().as_bytes().as_ptr().cast(),
+            !0, // -1: don't change owner
+            gid,
+        ) != 0
+        {
+            return Err(std::io::Error::last_os_error())
+                .context(format!("failed to chgrp {} to {group:?}", path.display()));
+        }
+    }
+
+    // Ensure group read+execute on the directory so members can traverse to the socket.
+    let mut perms = fs::metadata(path)
+        .with_context(|| format!("failed to stat {}", path.display()))?
+        .permissions();
+    let mode = perms.mode();
+    let new_mode = mode | 0o050; // group read + execute
+    if new_mode != mode {
+        fs::set_permissions(path, fs::Permissions::from_mode(new_mode))
+            .with_context(|| format!("failed to set permissions on {}", path.display()))?;
+    }
+
+    Ok(())
+}
+
 #[cfg(not(unix))]
 fn set_mode(_path: &Path, _mode: u32) -> Result<()> {
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn set_socket_dir_group(_path: &Path, _group: &str) -> Result<()> {
     Ok(())
 }
