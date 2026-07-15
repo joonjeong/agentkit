@@ -147,13 +147,13 @@ struct PermissionArg {
     value: String,
 }
 
-pub fn github_app(args: GithubAppArgs) -> Result<()> {
+pub fn github_app(args: GithubAppArgs) -> Result<i32> {
     match args.command {
         GithubAppSubcommand::Run(args) => github_session(args),
     }
 }
 
-pub fn github_session(args: GithubSessionArgs) -> Result<()> {
+pub fn github_session(args: GithubSessionArgs) -> Result<i32> {
     let token = request_agentd_github_token(&args)?;
     run_with_installation_token(
         &args.command,
@@ -221,7 +221,7 @@ fn run_with_installation_token(
     token: &str,
     git_credentials: bool,
     api_url: &str,
-) -> Result<()> {
+) -> Result<i32> {
     let (program, args) = command
         .split_first()
         .ok_or_else(|| anyhow!("missing command after --"))?;
@@ -254,18 +254,18 @@ fn run_with_installation_token(
     drop(git_credential_environment);
 
     if status.success() {
-        return Ok(());
+        return Ok(0);
     }
 
     if let Some(code) = status.code() {
-        std::process::exit(code);
+        return Ok(code);
     }
 
     #[cfg(unix)]
     {
         use std::os::unix::process::ExitStatusExt;
         if let Some(signal) = status.signal() {
-            std::process::exit(128 + signal);
+            return Ok(128 + signal);
         }
     }
 
