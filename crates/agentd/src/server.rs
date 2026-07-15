@@ -34,6 +34,10 @@ pub(crate) fn serve(config: AgentdConfigFile, socket_path: &Path, once: bool) ->
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {
+                if once {
+                    handle_stream(stream, &config)?;
+                    break;
+                }
                 let config = config.clone();
                 std::thread::spawn(move || {
                     if let Err(error) = handle_stream(stream, &config) {
@@ -42,9 +46,6 @@ pub(crate) fn serve(config: AgentdConfigFile, socket_path: &Path, once: bool) ->
                 });
             }
             Err(error) => return Err(error).context("failed to accept agentd connection"),
-        }
-        if once {
-            break;
         }
     }
     Ok(())

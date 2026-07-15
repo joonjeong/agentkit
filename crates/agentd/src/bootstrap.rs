@@ -310,7 +310,7 @@ fn set_socket_dir_group(path: &Path, group: &str) -> Result<()> {
     }
 
     // Ensure group read+execute on the directory so members can traverse to the socket.
-    let mut perms = fs::metadata(path)
+    let perms = fs::metadata(path)
         .with_context(|| format!("failed to stat {}", path.display()))?
         .permissions();
     let mode = perms.mode();
