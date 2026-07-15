@@ -1,4 +1,4 @@
-use std::ffi::OsStr;
+use std::ffi::{CString, OsStr};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -299,7 +299,7 @@ fn set_socket_dir_group(path: &Path, group: &str) -> Result<()> {
     // Set group ownership on the directory.
     unsafe {
         if libc::chown(
-            path.as_os_str().as_bytes().as_ptr().cast(),
+            path.as_os_str().as_encoded_bytes().as_ptr().cast(),
             !0, // -1: don't change owner
             gid,
         ) != 0
